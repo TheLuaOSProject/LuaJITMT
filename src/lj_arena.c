@@ -7273,35 +7273,79 @@ static GCArena *arena_unmap_list(TGAlloc *alloc, GCArena *a,
   return retained;
 }
 
+static int arena_unmap_bitmap_empty(const GCArena *a)
+{
+  uint32_t w;
+  for (w = 0; w < LJ_ARENA_WORDS; w++)
+    if (la_load64_acq(&a->block[w]) || la_load64_acq(&a->late[w]))
+      return 0;
+  return 1;
+}
+
+/* A terminal claim closes body admissions. The exact registry delete also
+** excludes readers which have not yet handed off to an arena count. */
+static int arena_unmap_certify_empty(TGAlloc *alloc, GCArena *a)
+{
+  return arena_unmap_bitmap_empty(a) && arena_unmap_side_empty(a) &&
+    lj_arena_gcprep_pending_acq(a) == 0 &&
+    la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL &&
+    la_loadptr_acq((void *const *)&a->hdr.plain_destruct) == NULL &&
+    arena_registry_delete(alloc, a);
+}
+
 void lj_arena_alloc_unmap_dead_empty(TGAlloc *alloc, GCArena *a)
 {
-  GCArena *next;
   uint64_t restore;
-  uint32_t w;
   if (!alloc || !a || arena_empty_reclaimed_acq(alloc) != a ||
       !(lj_arena_flags_acq(a) & LJ_AF_EMPTY_RECLAIMED) ||
       !arena_unmap_claim(a, &restore))
     return;
-  /* The cached empty proof only selects the candidate. A terminal claim
-  ** closes new body admissions, and the exact registry delete also excludes
-  ** readers which have not yet handed off to an arena count. */
-  for (w = 0; w < LJ_ARENA_WORDS; w++)
-    if (la_load64_acq(&a->block[w]) || la_load64_acq(&a->late[w]))
-      goto retained;
-  next = lj_arena_next_acq(a);
-  if (!arena_unmap_side_empty(a) ||
-      lj_arena_gcprep_pending_acq(a) != 0 ||
-      la_loadptr_acq((void *const *)&a->hdr.remote_free) != NULL ||
-      !arena_registry_delete(alloc, a))
-    goto retained;
-  la_storeptr_rel((void **)&alloc->empty_reclaimed, next);
-  arena_unmap_claimed(a);
-  return;
+  if (arena_unmap_certify_empty(alloc, a)) {
+    la_storeptr_rel((void **)&alloc->empty_reclaimed, lj_arena_next_acq(a));
+    arena_unmap_claimed(a);
+  } else {
+    /* The failed claim invalidated the cached empty proof. */
+    arena_unmap_abandon(a, restore);
+  }
+}
 
-retained:
-  /* The failed attempt invalidated the cache, so the next sweep can
-  ** reclassify this still-linked arena after the racing owner releases. */
-  arena_unmap_abandon(a, restore);
+int lj_arena_alloc_trim_dead_plain(TGAlloc *alloc, GCArena *prev, GCArena *a)
+{
+  const uint32_t kind = LJ_ARENAK_PLAIN;
+  LJArenaBump *b = &alloc->bump[kind];
+  GCArena *next;
+  uint64_t restore;
+  uint32_t count;
+  lj_assertX(a == (prev ? lj_arena_next_acq(prev) : alloc->owned[kind]),
+	     "stale dead plain arena scan cursor");
+  if (lj_arena_flags_acq(a) & (LJ_AF_TRAVERSABLE | LJ_AF_PREPSWEEP |
+			      LJ_AF_NEEDSWEEP | LJ_AF_QUARANTINE | LJ_AF_RECLAIMED))
+    return 0;
+  /* A dead owner has no allocation fast path. Forget its cached runs before
+  ** draining this arena, so even a long bin of other arenas costs no work.
+  ** Transfer rebuilds these bins from the remaining bitmap boundaries. */
+  arena_clear_bins(alloc, kind);
+  (void)arena_remote_free_drain_one(alloc, a);
+  (void)arena_plain_late_drain_one(alloc, a);
+  if (!arena_unmap_bitmap_empty(a) || !arena_unmap_claim(a, &restore))
+    return 0;
+  if (!arena_unmap_certify_empty(alloc, a)) {
+    arena_unmap_abandon(a, restore);
+    return 0;
+  }
+  next = lj_arena_next_acq(a);
+  count = lj_arena_alloc_owned_count_acq(alloc, kind);
+  lj_assertX(count != 0, "missing dead plain owned arena count");
+  arena_clear_bins(alloc, kind);  /* Discard runs created by the drain. */
+  if (b->a == a)
+    memset(b, 0, sizeof(*b));
+  if (prev)
+    lj_arena_next_rel(prev, next);
+  else
+    alloc->owned[kind] = next;
+  la_store32_rel(&alloc->owned_count[kind], count - 1u);
+  arena_unmap_claimed(a);
+  return 1;
 }
 
 static int arena_register_list(TGAlloc *alloc, GCArena *a)

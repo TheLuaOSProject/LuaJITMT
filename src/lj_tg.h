@@ -423,6 +423,11 @@ struct TGState {
   ** spins after losing its single CAS. Keeping this after every published
   ** VM/JIT field preserves all established TG offsets. */
   uint32_t gcroot_pending_owner;
+  /* The collector advances through the detached owner's PLAIN list via the
+  ** previous retained arena. Only the SWEEP worker owns this cursor. */
+  GCArena *dead_plain_prev;
+  uint32_t dead_plain_scan_epoch;
+  uint32_t dead_plain_done_epoch;
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
@@ -537,17 +542,10 @@ LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) >=
 #endif
 LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) +
 		 sizeof(((TGState *)0)->vmevent_regkey) <= sizeof(TGState));
-#if LJ_HASJIT
 LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, gcroot_pending_owner) +
-		  sizeof(((TGState *)0)->gcroot_pending_owner)) <
+		 (offsetof(TGState, dead_plain_done_epoch) +
+		  sizeof(((TGState *)0)->dead_plain_done_epoch)) <
 		 __alignof__(TGState));
-#else
-LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, gcroot_pending_owner) +
-		  sizeof(((TGState *)0)->gcroot_pending_owner)) <
-		 __alignof__(TGState));
-#endif
 
 static LJ_AINLINE int32_t lj_tg_vmstate_load_acq(TGState *tg)
 {

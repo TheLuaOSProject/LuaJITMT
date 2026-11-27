@@ -1070,6 +1070,11 @@ LJ_FUNC GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind,
 /* Trim an empty arena just published to the reclaimed head of a DEAD
 ** allocator. The caller owns the exact post-grace sweep reclaimer. */
 LJ_FUNC void lj_arena_alloc_unmap_dead_empty(TGAlloc *alloc, GCArena *a);
+/* Consider one owned PLAIN arena of a DEAD allocator, returning success
+** only after the exact candidate is unmapped. The sweep reclaimer retains
+** the source list and supplies the candidate's predecessor, if any. */
+LJ_FUNC int lj_arena_alloc_trim_dead_plain(TGAlloc *alloc, GCArena *prev,
+					 GCArena *a);
 LJ_FUNC uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src);
 LJ_FUNC int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs,
 				  uint32_t flags, uint32_t ncells,

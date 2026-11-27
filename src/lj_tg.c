@@ -993,6 +993,7 @@ static int tg_transfer_dead_alloc(global_State *g, TGState *tg)
     lj_arena_allocd_sethugetab(&tg->allocd, NULL);
   }
   (void)lj_arena_alloc_transfer(&main_tg->alloc, &tg->alloc);
+  tg->dead_plain_prev = NULL;
   lj_arena_allocd_init(&tg->allocd, &tg->alloc, &tg->prng, 0);
   lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_ARENA_INTERNAL);
   return 1;

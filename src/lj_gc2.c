@@ -6102,21 +6102,31 @@ void lj_gc2_sweep_prepare_bridge_boundary(global_State *g,
   (void)gc2_sweep_prepare_bridge_result(g);
 }
 
+static int gc2_sweep_dead_plain_pending(TGState *tg, uint32_t epoch)
+{
+  return lj_tg_flags_test_acq(tg, TGF_DEAD) &&
+    la_load32_acq(&tg->dead_plain_done_epoch) != epoch &&
+    lj_arena_alloc_owned_count_acq(&tg->alloc, LJ_ARENAK_PLAIN) != 0;
+}
+
 int lj_gc2_sweep_pending(global_State *g)
 {
   TGState *tg;
+  uint32_t epoch;
   if (!g || gc2_phase_acq(g) != LJ_GC2_SWEEP)
     return 0;
   if (lj_state_gcprep_pending_acq(g) != 0)
     return 1;
   if (lj_str_gc2_sweep_pending(g))
     return 1;
+  epoch = gc2_cycle_acq(g);
   for (tg = gc2_tg_list_acq(g);
        tg != NULL;
        tg = lj_tg_next_acq(tg))
     if (lj_gc2_sweep_tg_ready(tg)) {
       if (tg->alloc.needsweep[LJ_ARENAK_TRAVERSABLE] != NULL ||
-	  tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] != NULL)
+	  tg->alloc.quarantine[LJ_ARENAK_TRAVERSABLE] != NULL ||
+	  gc2_sweep_dead_plain_pending(tg, epoch))
 	return 1;
       if (lj_tg_flags_test_acq(tg, TGF_HUGETAB) &&
 	  lj_arena_hugetab_has_sweep_old(&tg->huge))
@@ -6190,6 +6200,34 @@ static void gc2_sweep_reclaim_leave(global_State *g)
 	     "SWEEP reclaim scope lost stable registry mode");
   gc2_reclaim_tls_leave(g);
   gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+}
+
+static uint32_t gc2_sweep_dead_plain_step(global_State *g, TGState *tg,
+					 uint32_t epoch)
+{
+  GCArena *prev, *a, *next;
+  if (!gc2_sweep_reclaim_enter(g)) {
+    /* Optional capacity release must not keep an otherwise complete
+    ** collection in SWEEP behind a suspended full-directory reader. */
+    tg->dead_plain_prev = NULL;
+    la_store32_rel(&tg->dead_plain_done_epoch, epoch);
+    return 0;
+  }
+  if (tg->dead_plain_scan_epoch != epoch) {
+    tg->dead_plain_scan_epoch = epoch;
+    tg->dead_plain_prev = NULL;
+  }
+  prev = tg->dead_plain_prev;
+  a = prev ? lj_arena_next_acq(prev) : tg->alloc.owned[LJ_ARENAK_PLAIN];
+  next = a ? lj_arena_next_acq(a) : NULL;
+  if (a && !lj_arena_alloc_trim_dead_plain(&tg->alloc, prev, a))
+    tg->dead_plain_prev = a;
+  if (!next) {
+    tg->dead_plain_prev = NULL;
+    la_store32_rel(&tg->dead_plain_done_epoch, epoch);
+  }
+  gc2_sweep_reclaim_leave(g);
+  return a != NULL;  /* A blocked candidate still advances the bounded scan. */
 }
 
 static uint32_t gc2_sweep_reclaim_jit(global_State *g, uint64_t epoch)
@@ -6483,6 +6521,13 @@ static uint32_t lj_gc2_sweep_owner_progress(global_State *g, TGState *tg,
       if (!step)
 	break;
       n++;
+      continue;
+    }
+    if (gc2_sweep_dead_plain_pending(tg, epoch)) {
+      uint32_t step = gc2_sweep_dead_plain_step(g, tg, epoch);
+      if (!step)
+	break;
+      n += step;
       continue;
     }
     break;
