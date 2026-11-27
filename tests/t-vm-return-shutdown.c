@@ -22,11 +22,16 @@ static int returning_finalizer(lua_State *L)
   lua_pushinteger(L, 31);
   lua_pushinteger(L, 47);
   assert(la_add32_acqrel(&entered, 1) == 0);
-  /* Stay inside this C call until lua_close has published its real request.
-  ** The callback return is then the first VM poll that can deliver it. */
-  while (!(lj_tg_reqmask_acq(tg) & LJ_GC2_HS_STOPREQ) &&
-         !lj_tg_flags_test_acq(tg, TGF_STOPREQ))
-    la_cpu_pause();
+  /* Publication of the counted request precedes its VM poll. Acknowledge
+  ** without throwing and wait for the leader to finish clearing/rearming.
+  ** The callback return is the first checked poll of the resulting edge. */
+  while (!lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH) ||
+         gc2_hs_leader_acq(G(L)) || !lj_tg_poll_acq(tg)) {
+    if (lj_tg_reqmask_acq(tg))
+      (void)lj_safepoint_ack(L);
+    else
+      la_cpu_pause();
+  }
   return 2;
 }
 
