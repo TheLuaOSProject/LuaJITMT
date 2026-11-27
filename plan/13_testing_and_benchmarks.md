@@ -63,10 +63,18 @@ L7 init-publish: t1 builds a 100-key table then publishes via channel; t2
 ## 13.4 Hammer suites (tests/stress/)
 t-tab-01..08, t-str-01..03 (12 §M5), t-gc-01..06 (M3), t-jit-01..06 (M6),
 t-ffi-01..06 (11 §11.8), t-weak-01..05 (M8), t-uv-01..07, t-bc-01..03,
-t-api-01..10. Plus combined: stress/kitchen.lua — N threads each running a
-random mix (tables, strings, closures, channels, coroutines, ffi, GC
-pokes) from a seeded PRNG for T minutes; any error/assert/crash fails;
-run under torture and normal pacing; this is the long-haul soak.
+t-api-01..10.
+
+[The mixed workload](../tests/stress/kitchen.lua) drives shared tables,
+strings, upvalues, channels, coroutines, FFI calls, cdata finalizers and
+incremental GC from a reproducible seed. Each worker publishes records with
+Lua and FFI fields. Main checks the records, independently recomputes each
+worker's checksum, and checks each batch's finalizers after the next batch or
+the final join. The Linux gate runs eight batches in JIT and interpreter
+mode. For a longer run use
+`LJ_MT_SOAK_SECONDS=3600 src/luajit -jon tests/stress/kitchen.lua 1 4 2 19`.
+The last three arguments select mutators, background collectors and seed.
+
 Coroutine×thread matrix: t-co-01 resume/yield storms while markers scan
 (exercises thr_owner GCSCAN spin); t-co-02 cross-thread resume handoff of
 the same coroutine through a channel.
