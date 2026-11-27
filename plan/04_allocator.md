@@ -231,10 +231,13 @@ worker/owner race on orphans).
 
 ## 4.9 C API allocator compatibility
 
-`lua_newstate(allocf, ud)`: custom allocf is *only* used as the
-arena/huge source (called with osize=LJ_ARENA_SIZE multiples) if the new
-`LUAJIT_MEM_HOOK` mode is requested; otherwise ignored with a one-time
-warning vmevent. `lua_getallocf` returns the shim. Document in 09 §9.10.
+On Linux x86-64, `lua_newstate(allocf, ud)` uses the supplied callback for
+the state and the backing blocks in which Lua values reside. A request can
+supply a whole slab or a large mapping and includes alignment and metadata.
+The callback active at release receives the original backing pointer and
+size. `lua_getallocf` returns the installed callback and userdata as a pair.
+`lua_setallocf` replaces that pair for all threads in the state. A wrapper
+can forward requests to the previous pair. [Embedding API](../doc/ext_c_api.html#arena_allocator)
 
 ## 4.10 What to delete / keep from lj_alloc.c
 Delete the dlmalloc body. Keep: the OS page primitives (mmap probing for

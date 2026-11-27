@@ -258,8 +258,10 @@ Rules for embedders: a lua_State may be used only by its owner thread or
 after explicit claim (06 §6.7); document loudly in luajit.h comments.
 
 ## 9.10 allocator note
-Per 04 §4.9: lua_newstate's allocf only feeds arena/huge mappings under
-LUAJIT_MEM_HOOK; otherwise ignored (one-time vmevent warning).
+All Lua threads share the allocator installed on their state. A Linux x64
+host can provide it at state creation and replace it while workers are
+running. The host callback must support concurrent calls and be compatible
+with outstanding backing blocks. [Allocator compatibility](04_allocator.md#49-c-api-allocator-compatibility), [embedding API](../doc/ext_c_api.html#arena_allocator)
 
 ## 9.11 Examples (ship in doc/ and as tests t-api-*.lua)
 ```lua
