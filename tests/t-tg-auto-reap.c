@@ -5,7 +5,29 @@
 #include "lj_obj.h"
 #include "lj_gc2.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lib/lua_fixture_helpers.h"
+
+static int nested_churn(lua_State *L)
+{
+  global_State *g = G(L);
+  TGState *tg = lj_mem_newt(L, sizeof(TGState), TGState), *next, *cursor;
+  assert(lj_tg_init_thread(g, tg, NULL, 1));
+  lj_tg_tid_rel(tg, lj_thr_newid());
+  lj_arena_alloc_owner_rel(&tg->alloc, lj_tg_tid_acq(tg));
+  lj_tg_flags_or_rlx(tg, TGF_LUA_ALLOC);
+  lj_tg_attach(g, tg);
+  lj_tg_detach(g, tg);
+  next = lj_tg_next_acq(tg);
+  lj_tg_reclaim_empty_defer(g, tg);
+  /* Nested Lua dispatch must preserve its C caller's unleased raw cursor. */
+  lua_pushvalue(L, 1);
+  lua_call(L, 0, 0);
+  for (cursor = gc2_tg_list_acq(g); cursor && cursor != tg;
+       cursor = lj_tg_next_acq(cursor)) {}
+  assert(cursor == tg && lj_tg_next_acq(cursor) == next);
+  return 0;
+}
 
 static int worker_census(lua_State *L)
 {
@@ -39,6 +61,7 @@ int main(void)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   alarm(60);
+  lua_register(L, "nested_churn", nested_churn);
   lua_register(L, "worker_census", worker_census);
   ljt_lua_assert_ok(L, luaL_loadstring(L,
     "local th, buffer = require('threading'), require('string.buffer')\n"
@@ -66,6 +89,11 @@ int main(void)
     "  end\n"
     "end\n"
     "jit.off(churn)\n"
+    "nested_churn(function()\n"
+    "  churn()\n"
+    "  assert(debug.traceback():find('nested_churn', 1, true))\n"
+    "  churn()\n"
+    "end)\n"
     "local function worker()\n"
     "  local result = buffer.new(1024)\n"
     "  for _ = 1, 200 do\n"
@@ -100,7 +128,7 @@ int main(void)
     "assert(joined and original == retained[2] and original:get() == payload)\n"
     "assert(sentinel:running())\n"
     "local dead, epoch, completed, pending, ack, phase = census()\n"
-    "local stats = ('retained %d of 144 TGs (%d pending), epoch %d, peer %d, swept %d, phase %d')\n"
+    "local stats = ('retained %d of 145 TGs (%d pending), epoch %d, peer %d, swept %d, phase %d')\n"
     "  :format(dead + pending, pending, epoch, ack, completed - initial_cycles, phase)\n"
     "assert(completed > initial_cycles and epoch > 0 and dead + pending <= 48, stats)\n"
     "original:free()\n"
