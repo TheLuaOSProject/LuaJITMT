@@ -1,5 +1,6 @@
 -- Seeded shared-heap soak. Arguments are batches, workers, collector workers
 -- and seed. LJ_MT_SOAK_SECONDS runs whole batches for a wall-clock interval.
+-- LJ_MT_SOAK_GC=continuous adds a mutator requesting major collections.
 local th = require("threading")
 local ffi = require("ffi")
 ffi.cdef("int abs(int);")
@@ -75,14 +76,19 @@ local function work(id, state, shared, inbox, replies)
 end
 
 local function check_finalizers(receipts)
-  for _ = 1, 8 do
+  local deadline = th.now() + 20
+  repeat
     collectgarbage()
     local done = true
-    for id = 1, count do done = done and receipts[id].calls == 1 end
+    for id = 1, count do
+      assert(receipts[id].calls <= 1, "duplicate finalizer for worker " .. id)
+      if receipts[id].calls == 0 then done = false end
+    end
     if done then return end
-  end
+    th.sleep(0)
+  until th.now() >= deadline
   for id = 1, count do
-    assert(receipts[id].calls == 1, "finalizer count for worker " .. id)
+    assert(receipts[id].calls == 1, "pending finalizer for worker " .. id)
   end
 end
 
@@ -93,6 +99,21 @@ for id = 1, count do
   states[id] = (seed + 7919 * id) % modulus
   inboxes[id] = th.channel(1)
   workers[id] = th.spawn(work, id, states[id], shared, inboxes[id], replies)
+end
+local pressure, stop_pressure = nil, false
+if os.getenv("LJ_MT_SOAK_GC") == "continuous" then
+  local ready = th.channel(1)
+  pressure = th.spawn(function()
+    local calls = 0
+    repeat
+      collectgarbage("collect")
+      calls = calls + 1
+      if calls == 1 then assert(ready:send(true)) end
+      th.sleep(0)
+    until stop_pressure
+    return calls
+  end)
+  assert(ready:recv(30) == true, "collector did not start")
 end
 local deadline = th.now() + seconds
 local tick = 0
@@ -122,6 +143,12 @@ repeat
 until (seconds > 0 and th.now() >= deadline) or (seconds <= 0 and tick >= batches)
 for id = 1, count do assert(inboxes[id]:send(false)) end
 for id = 1, count do assert(workers[id]:join()) end
+if pressure then
+  stop_pressure = true
+  local ok, calls = pressure:join(30)
+  assert(ok and calls > 0, "collector did not stop")
+  io.write(("background full collection requests: %d\n"):format(calls))
+end
 check_finalizers(previous)
 th.gcworkers(0)
 print(("shared soak passed %d batches, %d workers, %d collectors, seed %d"):

@@ -34,5 +34,6 @@ done
 LJ_M5_TAB_RESIZE_STRESS_CASES=jitstore,jitread,jititer \
   timeout 180 "$bin" tests/t-tab-resize-stress.lua
 LJ_MT_SOAK_SECONDS=0 timeout 180 "$bin" -jon tests/stress/kitchen.lua 8 4 2 19
-LJ_MT_SOAK_SECONDS=0 timeout 180 "$bin" -joff tests/stress/kitchen.lua 8 4 0 71
+LJ_MT_SOAK_SECONDS=0 LJ_MT_SOAK_GC=continuous \
+  timeout 180 "$bin" -joff tests/stress/kitchen.lua 8 4 0 71
 timeout 180 "$bin" bench/jit-parity.lua

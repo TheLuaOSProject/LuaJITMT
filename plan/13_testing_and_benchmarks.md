@@ -71,7 +71,10 @@ incremental GC from a reproducible seed. Each worker publishes records with
 Lua and FFI fields. Main checks the records, independently recomputes each
 worker's checksum, and checks each batch's finalizers after the next batch or
 the final join. The Linux gate runs eight batches in JIT and interpreter
-mode. For a longer run use
+mode. The interpreter run also uses a separate worker that repeatedly requests
+full collections until the workload joins. Enable this in either mode with
+`LJ_MT_SOAK_GC=continuous`. Each batch's finalizers have 20 seconds to
+complete while another collector can own the cycle. For a longer run use
 `LJ_MT_SOAK_SECONDS=3600 src/luajit -jon tests/stress/kitchen.lua 1 4 2 19`.
 The last three arguments select mutators, background collectors and seed.
 
