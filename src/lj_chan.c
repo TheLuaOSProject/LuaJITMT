@@ -115,6 +115,7 @@ static void chan_wait(lua_State *L, LJChan *ch)
   }
   if (L) {
     lj_trace_abort_owner_before_park(L);
+    lj_safepoint_channel_park_checkpoint(L, tg);
     lj_native_enter_l(L, &frame);  /* 09 section 9.5: channel park is native. */
   } else if (tg)
     lj_native_enter(tg);
@@ -165,6 +166,7 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
   }
   if (L) {
     lj_trace_abort_owner_before_park(L);
+    lj_safepoint_channel_park_checkpoint(L, tg);
     lj_native_enter_l(L, &frame);  /* 09 section 9.5: timed channel park. */
   } else if (tg)
     lj_native_enter(tg);

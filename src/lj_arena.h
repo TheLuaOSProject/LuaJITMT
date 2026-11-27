@@ -681,6 +681,7 @@ LJ_FUNC void lj_arena_hugetab_bind_table_topology(
 ** make partial mapping progress; DONE means the side table itself is gone.
 ** The terminal helpers require joined-world ownership of the HugeTab wrapper. */
 LJ_FUNC int lj_arena_hugetab_fini_try(HugeTab *ht);
+LJ_FUNC int lj_arena_hugetab_is_empty(HugeTab *ht);
 LJ_FUNC int lj_arena_hugetab_fini_all_try(HugeTab *ht,
 					   uint32_t *unmappedp);
 LJ_FUNC void lj_arena_hugetab_fini(HugeTab *ht);

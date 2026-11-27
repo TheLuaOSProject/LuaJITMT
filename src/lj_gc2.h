@@ -423,6 +423,8 @@ LJ_FUNC uint32_t lj_gc2_workers_count(global_State *g);
 LJ_FUNC uint32_t lj_gc2_terminal_reclaim_tgs(global_State *g);
 LJ_FUNC int lj_gc2_workers_set(global_State *g, uint32_t n);
 LJ_FUNC void lj_gc2_sweep_publish_wake(global_State *g);
+LJ_FUNC int lj_gc2_tg_unlink_try(global_State *g);
+LJ_FUNC void lj_gc2_tg_unlink_end(global_State *g, int wake);
 LJ_FUNC int lj_gc2_workers_set_l(lua_State *L, uint32_t n,
 				 uint32_t *actionsp);
 LJ_FUNC int lj_gc2_worker_stop(global_State *g);

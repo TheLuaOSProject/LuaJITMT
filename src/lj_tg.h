@@ -428,6 +428,9 @@ struct TGState {
   GCArena *dead_plain_prev;
   uint32_t dead_plain_scan_epoch;
   uint32_t dead_plain_done_epoch;
+  uint64_t dead_tg_epoch;  /* Main publication or this actor's safe epoch. */
+  uint64_t dead_tg_unlinked_epoch;
+  TGState *dead_tg_head, *dead_tg_tail;  /* Main-owned pending unlink queue. */
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
@@ -543,8 +546,8 @@ LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) >=
 LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) +
 		 sizeof(((TGState *)0)->vmevent_regkey) <= sizeof(TGState));
 LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, dead_plain_done_epoch) +
-		  sizeof(((TGState *)0)->dead_plain_done_epoch)) <
+		 (offsetof(TGState, dead_tg_tail) +
+		  sizeof(((TGState *)0)->dead_tg_tail)) <
 		 __alignof__(TGState));
 
 static LJ_AINLINE int32_t lj_tg_vmstate_load_acq(TGState *tg)
@@ -1642,6 +1645,7 @@ LJ_FUNC void lj_tg_detach(global_State *g, TGState *tg);
 LJ_FUNC int lj_tg_registry_main_close_begin(global_State *g);
 LJ_FUNC void lj_tg_registry_fini(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead(global_State *g);
+LJ_FUNC void lj_tg_dead_read_checkpoint(TGState *tg);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal_orphans(global_State *g);
 LJ_FUNC TGState *lj_tg_find_owner(global_State *g, uint32_t owner_tid);

@@ -2795,6 +2795,11 @@ static int hugetab_has_lifetime_claim(LJHugeTabHdr *h)
   return 0;
 }
 
+int lj_arena_hugetab_is_empty(HugeTab *ht)
+{
+  return !ht || !hugetab_has_lifetime_claim(ht->h);
+}
+
 int lj_arena_hugetab_init(HugeTab *ht, uint32_t hbits)
 {
   int olderr = errno;

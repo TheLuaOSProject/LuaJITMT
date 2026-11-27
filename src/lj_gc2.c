@@ -2200,6 +2200,24 @@ static void lj_gc2_worker_wake_all(global_State *g)
   lj_gc2_worker_wake_n(g, LJ_GC2_WORKER_MAX);
 }
 
+int lj_gc2_tg_unlink_try(global_State *g)
+{
+  if (!gc2_worker_claim(g))
+    return 0;
+  if (gc2_phase_acq(g) == LJ_GC2_IDLE && gc2_hs_leader_acq(g) == 0 &&
+      gc2_hs_pending_acq(g) == 0)
+    return 1;
+  gc2_worker_release(g);
+  return 0;
+}
+
+void lj_gc2_tg_unlink_end(global_State *g, int wake)
+{
+  gc2_worker_release(g);
+  if (wake && gc2_n_workers_acq(g))
+    lj_gc2_worker_wake_all(g);
+}
+
 void lj_gc2_test_worker_wake(global_State *g)
 {
   lj_gc2_worker_wake_all(g);
@@ -2520,6 +2538,9 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
   /* The explicit sole-mutator string pass never waits for pool control.  A
   ** competing enable either observes this gate here or loses the reciprocal
   ** publication/recheck below before it starts an OS worker. */
+  la_fence_seq();  /* Pairs worker_control admission with TG body withdrawal. */
+  if (gc2_tg_reclaiming_acq(g) != 0)
+    return 0;
   if (lj_str_reclaim_exclusive_acq(g) != 0)
     return 0;
   L = mainthread_acq(g);
@@ -2913,6 +2934,7 @@ static void *gc2_worker_main(void *arg)
     if (gc2_worker_stop_acq(g) != 0)
       break;
     if (deferred) {
+      lj_tg_dead_read_checkpoint(tg);
       gc2_worker_deferred_backoff(g);
       continue;
     }
@@ -2935,6 +2957,7 @@ static void *gc2_worker_main(void *arg)
     ** use a low-frequency active-cycle retry as the notification backstop.
     ** This is scheduler repair, not ownership transfer: a preempted token
     ** holder remains a separate helpability problem. */
+    lj_tg_dead_read_checkpoint(tg);
     gc2_worker_wake_futex_wait(g, wake, gc2_worker_park_timeout_ns(g));
   }
   /* Close the startup native scope before detach changes owner-private state.
@@ -3140,6 +3163,10 @@ int lj_gc2_collect_active(lua_State *L)
 	}
       }
       lj_gc2_publish_idle_threshold(g);
+      /* A background worker may have performed the IDLE transition. The
+      ** explicit requester supplies the main owner's dead-TG reclaim turn. */
+      if (gc2_n_threads_acq(g) > 1)
+	(void)lj_tg_reclaim_dead(g);
       return 1;
     }
     if (phase == LJ_GC2_MARK) {
@@ -19911,6 +19938,10 @@ static GC2TableTokenTGViewResult gc2_table_token_tg_view(
       GC2_TABLE_TOKEN_TG_SKIP : GC2_TABLE_TOKEN_TG_STRUCTURAL;
   }
   if (body.body == NULL) {
+    if (before.state == LJ_TGSLOT_RECLAIMING &&
+	after.state == LJ_TGSLOT_RECLAIMING &&
+	body.incarnation == after.incarnation)
+      return GC2_TABLE_TOKEN_TG_SKIP;  /* Directory body already withdrawn. */
     /* A linked reused slot may expose only this canonical attach gap. A body
     ** publication racing our middle snapshot is likewise a later-pass item,
     ** even if the final token has already advanced to LIVE. */

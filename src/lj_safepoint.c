@@ -554,6 +554,14 @@ static int safepoint_str_vm_frame(lua_State *L, TGState *tg)
   return 1;
 }
 
+void lj_safepoint_channel_park_checkpoint(lua_State *L, TGState *tg)
+{
+  /* A channel operation entered from the outer Lua frame cannot suspend
+  ** a caller's retained C registry cursor or an outer FFI frame. */
+  if (L && tg && safepoint_str_vm_frame(L, tg))
+    lj_tg_dead_read_checkpoint(tg);
+}
+
 static uint32_t safepoint_ack_tg(global_State *g, TGState *tg,
 				 int note_latency, int wait_consumed,
 				 int native_parked,

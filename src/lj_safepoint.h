@@ -70,6 +70,7 @@ typedef struct LJNativeFrame {
   uint8_t active;
 } LJNativeFrame;
 LJ_FUNCA void lj_native_enter(TGState *tg);
+LJ_FUNC void lj_safepoint_channel_park_checkpoint(lua_State *L, TGState *tg);
 LJ_FUNCA uint32_t lj_native_leave(lua_State *L);
 LJ_FUNC uint32_t lj_native_leave_tg(TGState *tg);
 LJ_FUNCA void lj_native_enter_l(lua_State *L, LJNativeFrame *frame);

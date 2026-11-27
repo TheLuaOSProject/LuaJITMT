@@ -348,6 +348,9 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   lj_tg_gcroot_pending_after_main_store_rlx(tg, NULL);
   la_store32_rlx(&tg->gcroot_pending_owner,
 		 (uint32_t)LJ_TG_ROOT_PENDING_IDLE);
+  la_store64_rlx(&tg->dead_tg_epoch, 0);
+  tg->dead_tg_unlinked_epoch = 0;
+  tg->dead_tg_head = tg->dead_tg_tail = NULL;
   tg_init_ssb(tg);
   la_storeptr_rlx((void **)&tg->fnew_cert_pt, NULL);
   la_storeptr_rlx((void **)&tg->fnew_cert_env, NULL);
@@ -1124,6 +1127,150 @@ static int tg_worker_retired_contains(global_State *g, TGState *target)
   return 0;
 }
 
+void lj_tg_dead_read_checkpoint(TGState *tg)
+{
+  TGState *main_tg = tg && tg->gl ? tg->gl->main_tg : NULL;
+  uint64_t epoch;
+  if (!main_tg || tg == main_tg)
+    return;
+  epoch = la_load64_acq(&main_tg->dead_tg_epoch);
+  if (epoch != la_load64_acq(&tg->dead_tg_epoch))
+    la_store64_rel(&tg->dead_tg_epoch, epoch);
+}
+
+/* Only a detached empty allocator needs no ownership transfer. The GC worker
+** claim excludes sweep relocation between the private allocator lists. The
+** HugeTab remains mapped until the registry-reader grace period finishes. */
+static int tg_detached_storage_empty(TGState *tg)
+{
+  uint32_t k;
+  if (!lj_tg_flags_all_acq(tg, TGF_DEAD|TGF_LUA_ALLOC|TGF_DEFER_FREE) ||
+      !lj_tgregistry_key_valid(&tg->registry_key) ||
+      lj_tg_actor_acq(tg) != LJ_THR_ACTOR_RETIRED ||
+      lj_tg_ssb_refs_acq(tg) || lj_tg_root_anchor_top_acq(tg) ||
+      lj_tg_gcroot_pending_owner_acq(tg) != LJ_TG_ROOT_PENDING_IDLE ||
+      lj_tg_gcroot_pending_acq(tg) || lj_tg_gcroot_pending_after_main_acq(tg))
+    return 0;
+  for (k = 0; k < LJ_ARENA_NKINDS; k++) {
+    if (tg->alloc.owned[k] || tg->alloc.needsweep[k] || tg->alloc.quarantine[k] ||
+	lj_arena_alloc_reclaimed_head(&tg->alloc, k))
+      return 0;
+  }
+  return !lj_arena_alloc_empty_reclaimed_head(&tg->alloc) &&
+    lj_arena_hugetab_is_empty(&tg->huge);
+}
+
+static void tg_unlink_empty_dead(global_State *g, TGState *main_tg)
+{
+  TGState *tg, *prev = NULL;
+  uint64_t epoch = la_load64_acq(&main_tg->dead_tg_epoch);
+  uint32_t unlinked = 0;
+  if (epoch == UINT64_MAX || gc2_tg_registry_incomplete_acq(g) ||
+      !lj_gc2_tg_unlink_try(g))
+    return;
+  epoch++;
+  for (tg = gc2_tg_list_acq(g); tg && unlinked < 8;) {
+    TGState *next = lj_tg_next_acq(tg);
+    LJTGRegistryKey key;
+    if (next == tg)
+      break;
+    if (tg_detached_storage_empty(tg) && tg_registry_reclaim_begin(tg, &key)) {
+      if (prev) {
+	lj_tg_next_rel(prev, next);
+      } else {
+	TGState *expected = tg;
+	if (!gc2_tg_list_cas(g, &expected, next))
+	  break;  /* A concurrent attach prepended a new head. */
+      }
+      /* Old readers can finish through this TG's original next_tg link.
+      ** Subsequent readers of the published unlink epoch see the new list. */
+      tg->dead_tg_unlinked_epoch = epoch;
+      lj_tg_worker_retire_next_rel(tg, NULL);
+      if (main_tg->dead_tg_tail)
+	lj_tg_worker_retire_next_rel(main_tg->dead_tg_tail, tg);
+      else
+	main_tg->dead_tg_head = tg;
+      main_tg->dead_tg_tail = tg;
+      unlinked++;
+    } else {
+      prev = tg;
+    }
+    tg = next;
+  }
+  if (unlinked)
+    la_store64_rel(&main_tg->dead_tg_epoch, epoch);
+  lj_gc2_tg_unlink_end(g, unlinked != 0);
+}
+
+static int tg_dead_grace_done(global_State *g, TGState *main_tg, uint64_t epoch)
+{
+  TGState *tg;
+  uint32_t active = 0, mutators = 0, workers = gc2_n_workers_acq(g);
+  if (mt_entering_acq(g) || gc2_worker_control_acq(g) ||
+      (workers && (gc2_worker_started_acq(g) != workers ||
+		   gc2_worker_exited_acq(g) != 0)))
+    return 0;
+  for (tg = gc2_tg_list_acq(g); tg; tg = lj_tg_next_acq(tg)) {
+    uint8_t flags = lj_tg_flags_acq(tg);
+    if (flags & TGF_DEAD)
+      continue;
+    active++;
+    if (tg == main_tg)
+      continue;
+    if (flags & (TGF_LUA_ALLOC|TGF_HEAP))
+      mutators++;
+    if (la_load64_acq(&tg->dead_tg_epoch) < epoch)
+      return 0;
+  }
+  /* An entrant may have sampled the old list before CAS-prepending itself.
+  ** Count the published cohort and exclude a concurrent pool transition. */
+  return active == gc2_n_threads_acq(g) && mutators == mt_live_acq(g) &&
+    !mt_entering_acq(g) && !gc2_worker_control_acq(g);
+}
+
+static uint32_t tg_finish_empty_dead(global_State *g, int terminal)
+{
+  TGState *main_tg = g->main_tg, *tg = main_tg->dead_tg_head;
+  LJTGRegistryKey key;
+  LJTGRegistryBodySnap body;
+  uint32_t expect = LJ_GC2_SMR_OPEN;
+  if (!tg || (!terminal && !tg_dead_grace_done(g, main_tg,
+					tg->dead_tg_unlinked_epoch)) ||
+      !gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_TG_EXCLUSIVE))
+    return 0;
+  expect = 0;
+  if (!gc2_tg_reclaiming_cas(g, &expect, 1)) {
+    gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
+    return 0;
+  }
+  /* New attach/pool entrants cannot start an old raw walk between the
+  ** grace census and withdrawal. Existing readers either acknowledge the
+  ** unlink epoch or remain counted by SMR. */
+  la_fence_seq();
+  if (gc2_smr_readers_acq(g) || gc2_worker_active_acq(g) ||
+      (!terminal && !tg_dead_grace_done(g, main_tg,
+				      tg->dead_tg_unlinked_epoch))) {
+    tg_reclaim_writer_leave(g);
+    return 0;
+  }
+  key = tg->registry_key;
+  body = lj_tgregistry_slot_body_snapshot(key.slot);
+  if (!lj_tgregistry_body_snap_is(&body, tg, key.incarnation) ||
+      !lj_tgregistry_body_cas(key.slot, &body, NULL, key.incarnation))
+    abort();
+  main_tg->dead_tg_head = lj_tg_worker_retire_next_acq(tg);
+  if (!main_tg->dead_tg_head)
+    main_tg->dead_tg_tail = NULL;
+  tg_reclaim_writer_leave(g);
+  /* Both discovery paths are gone. No reader from the old list or the stable
+  ** slot can still acquire the body, and its allocators contain no mappings. */
+  if (!lj_tg_fini_thread(g, tg))
+    abort();
+  lj_mem_freet(g, tg);
+  tg_registry_reclaim_finish(g, &key);
+  return 1;
+}
+
 static uint32_t tg_reclaim_dead(global_State *g, int terminal, int orphan)
 {
   TGState *prev, *tg;
@@ -1257,17 +1404,31 @@ restart:
 
 uint32_t lj_tg_reclaim_dead(global_State *g)
 {
-  return tg_reclaim_dead(g, 0, 0);
+  uint32_t n = 0;
+  TGState *main_tg;
+  if (g && (main_tg = g->main_tg) != NULL && lj_thr_get_tg() == main_tg &&
+      !mt_shutdown_acq(g) && gc2_phase_acq(g) == LJ_GC2_IDLE) {
+    while (n < 8 && tg_finish_empty_dead(g, 0))
+      n++;
+    if (!tg_reclaim_dead_admissible(g, 0) &&
+	!main_tg->dead_tg_head)
+      tg_unlink_empty_dead(g, main_tg);
+  }
+  return n + tg_reclaim_dead(g, 0, 0);
 }
 
 uint32_t lj_tg_reclaim_dead_terminal(global_State *g)
 {
+  uint32_t n = 0;
   /* A closing Lua universe may share its OS thread with another universe, so
   ** raw TLS legitimately need not name this GG's embedded main TG. Shutdown
   ** has already closed attach admission and joined every mutator/GC worker;
   ** the counter checks and writer CAS above are the terminal ownership proof.
   ** Keep the ordinary runtime path main-TLS-only. */
-  return tg_reclaim_dead(g, 1, 0);
+  if (tg_reclaim_dead_admissible(g, 1) && g->main_tg)
+    while (tg_finish_empty_dead(g, 1))
+      n++;
+  return n + tg_reclaim_dead(g, 1, 0);
 }
 
 uint32_t lj_tg_reclaim_dead_terminal_orphans(global_State *g)
