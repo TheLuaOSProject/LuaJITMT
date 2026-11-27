@@ -32,10 +32,21 @@ int __wrap_munmap(void *p, size_t size)
   return result;
 }
 
-static void wait_flag(uint32_t *flag)
+static uint64_t wait_deadline(void)
 {
-  while (la_load32_acq(flag) == 0)
+  return lj_thr_now_ns() + UINT64_C(10000000000);
+}
+
+static void wait_flag(uint32_t *flag, const char *stage)
+{
+  uint64_t deadline = wait_deadline();
+  while (la_load32_acq(flag) == 0) {
+    if (lj_thr_now_ns() >= deadline) {
+      fprintf(stderr, "Timed out waiting for %s.\n", stage);
+      abort();
+    }
     lj_thr_sched_yield();
+  }
 }
 
 static TGState *target_on_list(global_State *g)
@@ -60,7 +71,7 @@ static int hold_cursor(lua_State *L)
   assert(tg);
   next = lj_tg_next_acq(tg);
   la_store32_rel(&cursor_ready, 1);
-  wait_flag(&cursor_release);
+  wait_flag(&cursor_release, "managed cursor release");
   assert_cursor(tg, next);
   return 0;
 }
@@ -75,7 +86,7 @@ static void *hold_smr(void *arg)
   assert(tg);
   next = lj_tg_next_acq(tg);
   la_store32_rel(&smr_ready, 1);
-  wait_flag(&smr_release);
+  wait_flag(&smr_release, "ordinary registry reader release");
   assert_cursor(tg, next);
   lj_gc2_smr_read_leave(g);
   return NULL;
@@ -91,7 +102,7 @@ static void *hold_control(void *arg)
   assert(tg);
   next = lj_tg_next_acq(tg);
   la_store32_rel(&control_ready, 1);
-  wait_flag(&control_release);
+  wait_flag(&control_release, "unbound controller release");
   assert_cursor(tg, next);
   gc2_worker_control_rel(g, 0);
   gc2_worker_control_futex_wake(g, 1);
@@ -118,14 +129,22 @@ static int make_target(lua_State *L)
 static int begin_unlink(lua_State *L)
 {
   global_State *g = G(L);
-  wait_flag(&cursor_ready);
+  uint64_t deadline;
+  wait_flag(&cursor_ready, "managed cursor admission");
   assert(pthread_create(&smr_thread, NULL, hold_smr, g) == 0);
-  wait_flag(&smr_ready);
+  wait_flag(&smr_ready, "ordinary registry reader admission");
   assert(pthread_create(&control_thread, NULL, hold_control, g) == 0);
-  wait_flag(&control_ready);
+  wait_flag(&control_ready, "unbound controller admission");
   lj_tg_flags_or_rlx(target, TGF_DEFER_FREE);
-  while (target_on_list(g))
+  deadline = wait_deadline();
+  while (target_on_list(g)) {
+    if (lj_thr_now_ns() >= deadline) {
+      fprintf(stderr, "Detached TG stayed on the raw list in GC phase %u.\n",
+        gc2_phase_acq(g));
+      abort();
+    }
     (void)lj_tg_reclaim_empty_dead(g);
+  }
   return 0;
 }
 
@@ -190,9 +209,22 @@ static int await_withdrawn(lua_State *L)
 {
   global_State *g = G(L);
   LJTGSlotSnap slot;
+  int spinning_peer = lua_toboolean(L, 1);
+  uint64_t deadline = wait_deadline();
   do {
     (void)lj_tg_reclaim_empty_dead(g);
     assert(lj_tgregistry_key_snapshot(&target_key, &slot) == LJ_TGSLOT_OK);
+    /* Full collection can defer an in-flight native root proof to a later
+    ** call. Keep explicitly driving that phase when no pool can finish it. */
+    if (spinning_peer && slot.state != LJ_TGSLOT_EMPTY)
+      (void)lua_gc(L, LUA_GCCOLLECT, 0);
+    if (slot.state != LJ_TGSLOT_EMPTY && lj_thr_now_ns() >= deadline) {
+      fprintf(stderr, "Detached TG withdrawal timed out in GC phase %u "
+        "with slot state %u, %u registry readers and pool control %u.\n",
+        gc2_phase_acq(g), slot.state, gc2_smr_readers_acq(g),
+        gc2_worker_control_acq(g));
+      abort();
+    }
     lj_thr_sched_yield();
   } while (slot.state != LJ_TGSLOT_EMPTY);
   assert(la_load32_acq(&target_unmapped));
@@ -241,7 +273,7 @@ int main(void)
     "if spin then for _ = 1, 3 do collectgarbage('collect') end end\n"
     "check_mapped()\n"
     "release_control()\n"
-    "await_withdrawn()\n"
+    "await_withdrawn(spin)\n"
     "if not spin then\n"
     "  make_target()\n"
     "  nested_collect()\n"
