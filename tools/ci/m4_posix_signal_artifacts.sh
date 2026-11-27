@@ -112,7 +112,8 @@ grep -F 'lj_safepoint_owner_poll_pending(L)' \
 grep -F 'lj_tg_profile_request_acq(tg) != 0' \
   "$root/src/lj_safepoint.h" >/dev/null
 grep -F '|| lj_profile_poll_required(g)' "$root/src/lj_opt_loop.c" >/dev/null
-grep -F 'if (rec_needs_xpoll(J))' "$root/src/lj_record.c" >/dev/null
+grep -F 'emitir_raw(IRTG(IR_XPOLL, IRT_NIL), rec_needs_xpoll(J), 0);' \
+  "$root/src/lj_record.c" >/dev/null
 grep -F '|| lj_profile_poll_required(g)' "$root/src/lj_record.c" >/dev/null
 grep -F 'ctx->status = lj_trace_flushall_hs_noevent(L);' \
   "$root/src/lj_profile.c" >/dev/null
