@@ -11,10 +11,10 @@
 ** The runtime best-effort shadow-publishes TG bodies through these slots and
 ** its legacy raw TG list. Slot OOM marks the universe incomplete and keeps the
 ** exact TG on the legacy-only path. Runtime slots are separately allocated,
-** linked once, never reused, and retained until universe shutdown. The legacy
-** list/SMR/raw-holder gates remain mandatory positive reclaim authority; this
-** token is currently only an additional lifecycle mirror and negative lease
-** veto.
+** linked once and retained until universe shutdown. Empty slots can claim a
+** new incarnation after all raw and arena owners have cleared the old one.
+** The legacy list/SMR/raw-holder gates remain mandatory reclaim authority;
+** this token mirrors the lifecycle and vetoes reclaim while leases exist.
 */
 #ifndef _LJ_TGREGISTRY_H
 #define _LJ_TGREGISTRY_H

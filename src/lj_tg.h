@@ -376,7 +376,7 @@ struct TGState {
   /* Dormant until every root writer and phase edge uses the admission gate. */
   LJGC2RootDesc root_desc;
   /* Stable slot storage is external and survives this TG body. The key names
-  ** its one non-reused runtime incarnation until legacy reclaim clears it. */
+  ** its exact runtime incarnation until legacy reclaim clears it. */
   LJTGRegistryKey registry_key;
   uint8_t registry_shadow_missed;  /* Legacy-only attach after slot OOM. */
 #if LJ_HASFFI

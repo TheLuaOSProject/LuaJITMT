@@ -215,7 +215,12 @@ int main(void)
   lj_tg_attach(g, &missed_tg);
   assert(!lj_tg_registry_shadow_missed_acq(&missed_tg));
   assert(lj_tgregistry_key_valid(&missed_tg.registry_key));
-  assert(gc2_tg_registry_nodes_acq(g) == stable_nodes0 + 1u);
+  assert(gc2_tg_registry_nodes_acq(g) == stable_nodes0);
+  assert(missed_tg.registry_key.slot == dead_key.slot);
+  assert(missed_tg.registry_key.incarnation == dead_key.incarnation + 1u);
+  assert(lj_tgregistry_try_borrow(&dead_key, &stable_borrow, &snap) ==
+	 LJ_TGSLOT_STALE);
+  assert(!stable_borrow.active);
   assert(gc2_n_threads_acq(g) == live0 + 1u);
   assert(lj_tgregistry_key_snapshot(&missed_tg.registry_key, &snap) ==
 	 LJ_TGSLOT_OK);

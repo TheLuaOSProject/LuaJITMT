@@ -604,14 +604,6 @@ static void tg_attach_catchup(global_State *g, TGState *tg)
   }
 }
 
-static LJ_NORET void tg_registry_attach_corrupt(LJTGRegistrySlot *slot)
-{
-  free(slot);
-  /* Successful allocation followed only by private constant-state primitive
-  ** operations. Failure here is corruption, not a recoverable OOM edge. */
-  abort();
-}
-
 /* A pinned authority permanently vetoes scanner acknowledgement but must not
 ** turn stable-registry publication or teardown into a progress lock. */
 static LJ_AINLINE void tg_table_topology_changed(global_State *g)
@@ -623,31 +615,50 @@ static LJ_AINLINE void tg_table_topology_changed(global_State *g)
 static int tg_registry_link_attaching(global_State *g, TGState *tg)
 {
   LJTGRegistrySlot *head;
-  LJTGRegistrySlot *slot;
+  LJTGRegistrySlot *slot = NULL;
   LJTGRegistryKey key;
   LJTGSlotSnap snap;
+  int reused = 0;
 #if defined(LJ_GC2_TEST_HELPERS)
-  if (gc2_tg_registry_test_fail_alloc_xchg(g, 0) != 0)
-    slot = NULL;
-  else
+  if (gc2_tg_registry_test_fail_alloc_xchg(g, 0) == 0)
 #endif
-    slot = (LJTGRegistrySlot *)malloc(sizeof(*slot));
+  {
+    for (slot = gc2_tg_registry_head_acq(g); slot;
+	 slot = lj_tgregistry_slot_next_all(slot)) {
+      snap = lj_tgslot_snapshot(&slot->token);
+      if (snap.state == LJ_TGSLOT_EMPTY && snap.incarnation != UINT64_MAX &&
+	  lj_tgregistry_try_claim(slot, &key, &snap) == LJ_TGSLOT_OK) {
+	reused = 1;
+	break;
+      }
+    }
+    if (!slot)
+      slot = (LJTGRegistrySlot *)malloc(sizeof(*slot));
+  }
   if (!slot) {
     (void)gc2_tg_registry_alloc_failures_add(g, 1);
     gc2_tg_registry_incomplete_rel(g, 1);
     lj_tg_registry_shadow_missed_rel(tg, 1);
     return 0;
   }
-  if (!lj_tgregistry_slot_init_unpublished(slot, 0, NULL) ||
-      lj_tgregistry_try_claim(slot, &key, &snap) != LJ_TGSLOT_OK ||
-      lj_tgregistry_try_publish_body(&key, tg, &snap) != LJ_TGSLOT_OK)
-    tg_registry_attach_corrupt(slot);
+  if (!reused && (!lj_tgregistry_slot_init_unpublished(slot, 0, NULL) ||
+      lj_tgregistry_try_claim(slot, &key, &snap) != LJ_TGSLOT_OK))
+    abort();  /* An unpublished slot cannot contend. */
+  /* EMPTY is published only after all old arena wake routes have moved or
+  ** disappeared. The claimed incarnation now owns this wake word. */
+  la_store32_rlx(&slot->plain_free_pending, 0);
+  if (lj_tgregistry_try_publish_body(&key, tg, &snap) != LJ_TGSLOT_OK)
+    abort();
   tg->registry_key = key;
   if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     lj_arena_alloc_bind_plain_free_wake(&tg->alloc);
   /* A legacy-only missed attach may retry idempotently. Clear its per-body
   ** exception before the stable head release makes this slot discoverable. */
   lj_tg_registry_shadow_missed_rel(tg, 0);
+  if (reused) {
+    tg_table_topology_changed(g);
+    return 1;
+  }
   for (;;) {
     head = gc2_tg_registry_head_acq(g);
     /* The slot is still private after a failed head CAS, so next_all may be
@@ -1219,7 +1230,7 @@ restart:
       ** this writer performs any finalization/free it owns. Unflagged workers
       ** and ordinary Lua-owned TGs instead retain a separate raw storage owner
       ** after unlink; zero stable borrows is established before their slot is
-      ** cleared. Slots are not reused and stay linked until shutdown. */
+      ** cleared. The stable slot stays linked and can claim a new incarnation. */
       if (lj_tgregistry_key_valid(&registry_key))
 	tg_registry_reclaim_finish(g, &registry_key);
       tg = next;
