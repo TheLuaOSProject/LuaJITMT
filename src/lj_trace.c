@@ -11288,6 +11288,8 @@ typedef enum TraceStartResult {
   TRACE_START_RESULT_PARKED
 } TraceStartResult;
 
+#define TRACE_HOT_GC_RETRY	16
+
 /* Start tracing. Terminal work is returned to trace_state(), which first
 ** publishes IDLE and releases the recorder token before dispatch repair or a
 ** full flush. */
@@ -11353,7 +11355,8 @@ static TraceStartResult trace_start(jit_State *J)
     ** token acquisition remains a bounded try and trace_start() still refuses
     ** to publish anything until the phase is safe. */
     if (J->parent == 0 && J->pc != NULL)
-      (void)hotcount_setl(J2G(J), jit_owner_l_acq(J), J->pc+1, 16);
+      (void)hotcount_setl(J2G(J), jit_owner_l_acq(J), J->pc+1,
+                         TRACE_HOT_GC_RETRY);
     return TRACE_START_RESULT_IDLE;
   }
   trace_mark_active_startpt(J);
@@ -12827,6 +12830,7 @@ static int trace_hot_root_start_valid(const BCIns *pc)
 void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
 {
   /* Note: pc is the interpreter bytecode PC here. It's offset by 1. */
+  global_State *g = J2G(J);
   ERRNO_SAVE
   trace_test_admission_inject(L, J, pc, LJ_TRACE_TEST_ADMISSION_ENTRY);
   /* vm_hotloop reaches C only after its counter subtraction and deliberately
@@ -12836,7 +12840,7 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
   if (lj_safepoint_owner_poll_pending(L))
     (void)lj_safepoint_ack_check(L);
   /* Reset hotcount. */
-  (void)hotcount_setl(J2G(J), L, pc,
+  (void)hotcount_setl(g, L, pc,
 	jit_param_acq(J, JIT_P_hotloop)*HOTCOUNT_LOOP);
 #if LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED
   /* Compile the complete JIT surface without permitting recorder ownership,
@@ -12856,9 +12860,9 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
   /* Only start a new trace if not recording or inside __gc call or vmevent. */
   if ((jit_flags_acq(J) & JIT_F_ON) &&
       lj_trace_state_load(J) == LJ_TRACE_IDLE &&
-      !(lj_tg_hookmask_combined_load(J2G(J), L2TG(L)) &
+      !(lj_tg_hookmask_combined_load(g, L2TG(L)) &
 	(HOOK_GC|HOOK_VMEVENT)) &&
-      lj_jit_trace_stream_idle(J2G(J)) &&
+      lj_jit_trace_stream_idle(g) &&
       lj_jit_token_try_l(L, J)) {
     jit_owner_l_rel(J, L);
     trace_test_admission_inject(L, J, pc,
@@ -12877,7 +12881,7 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
     }
     /* Close the idle-snapshot/token-CAS race. A standalone terminal may have
     ** published before releasing the low token we just acquired. */
-    if (!lj_jit_trace_stream_idle(J2G(J))) {
+    if (!lj_jit_trace_stream_idle(g)) {
       lj_jit_token_release_l(L, J);
       ERRNO_RESTORE
       return;
@@ -12887,6 +12891,20 @@ void LJ_FASTCALL lj_trace_hot(jit_State *J, const BCIns *pc, lua_State *L)
       ERRNO_RESTORE
       return;
     }
+#if LJ_TARGET_LINUX && LJ_TARGET_X64
+    /* A cold loop can run indefinitely without allocating while SWEEP
+    ** refuses its recorder. Give the interrupted interpreter a bounded GC
+    ** turn. Release the recorder before GC can invoke a Lua finalizer. */
+    if (gc2_phase_acq(g) == LJ_GC2_SWEEP && lj_gc_auto_running(g) &&
+        !gc2_worker_active_acq(g) &&
+        !la_load32_acq(&g->gc2.explicit_collectors)) {
+      (void)hotcount_setl(g, L, pc, TRACE_HOT_GC_RETRY);
+      lj_jit_token_release_l(L, J);
+      (void)lj_gc_step(L);
+      ERRNO_RESTORE
+      return;
+    }
+#endif
     J->parent = 0;  /* Root trace. */
     J->exitno = 0;
     if (!lj_trace_state_aborted(

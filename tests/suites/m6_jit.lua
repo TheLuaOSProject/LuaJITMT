@@ -3085,6 +3085,13 @@ assert(live >= 4, live)
     name = "m6_jit_flush_atomic_redispatch",
     description = "JIT patch generations are decoded atomically after hotloop",
     run = function(t)
+      if jit.os == "Linux" and t.target_arch == "x64" then
+        build_and_run_c(t, t:tmp("lj_t-jit-sweep-hotloop"),
+                        "t-jit-sweep-hotloop.c", {
+          timeout = "30s",
+          libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=lj_trace_hot" }
+        })
+      end
       build_and_run_c(t, t:tmp("lj_t-jit-stale-loop-backedge"),
                       "t-jit-stale-loop-backedge.c", {
         timeout = "20s",
