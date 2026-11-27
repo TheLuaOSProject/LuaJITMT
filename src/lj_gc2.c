@@ -5884,14 +5884,32 @@ typedef struct GC2ErrFinEvent {
   ptrdiff_t errslot;
 } GC2ErrFinEvent;
 
+static void gc2_finalizer_restore_top(lua_State *L, ptrdiff_t oldtop,
+				      MSize nslots)
+{
+  TValue *slot = restorestack(L, oldtop);
+  TValue *limit = tvref(L->maxstack);
+  L->top = slot;
+  /* A native wait can expose unused stack slots to a conservative root scan.
+  ** Drop the collector's function and argument even if the callback moved
+  ** or shrank the stack. A failed stack reservation wrote no call slots. */
+  while (nslots && slot < limit) {
+    setnilV(slot);
+    slot++;
+    nslots--;
+  }
+}
+
 static TValue *gc2_errfin_vmevent_cp(lua_State *L, lua_CFunction dummy,
 				     void *ud)
 {
   GC2ErrFinEvent *ctx = (GC2ErrFinEvent *)ud;
   UNUSED(dummy);
   UNUSED(ctx);  /* ERRFIN send compiles out with LUAJIT_DISABLE_VMEVENT. */
-  lj_vmevent_send_l(L, ERRFIN,
+  lj_vmevent_send_l_(L, ERRFIN,
     copyTV(V, V->top++, restorestack(L, ctx->errslot));
+  ,
+    gc2_finalizer_restore_top(V, vmevtop, 2+LJ_FR2);
   );
   return NULL;
 }
@@ -5904,14 +5922,14 @@ static TValue *gc2_errfin_vmevent_cp(lua_State *L, lua_CFunction dummy,
 */
 static void gc2_errfin_vmevent_claimed(lua_State *L, LJStateClaim *claim,
 				       ptrdiff_t errslot,
-				       ptrdiff_t restoretop)
+				       ptrdiff_t oldtop, MSize nslots)
 {
   GC2ErrFinEvent ctx;
   int errcode;
   ctx.errslot = errslot;
   errcode = lj_vm_cpcall(L, NULL, &ctx, gc2_errfin_vmevent_cp);
   if (errcode == 0)
-    L->top = restorestack(L, restoretop);
+    gc2_finalizer_restore_top(L, oldtop, nslots);
   lj_state_dropclaim(claim);
   if (LJ_UNLIKELY(errcode))
     lj_err_throw(L, errcode);
@@ -5928,7 +5946,7 @@ static int gc2_finalizer_checkstack_claimed(global_State *g, lua_State *L,
     errcode = lj_state_cpgrowstack(L, need);
   if (LJ_UNLIKELY(errcode)) {
     ptrdiff_t errslot = savestack(L, L->top-1);
-    gc2_errfin_vmevent_claimed(L, claim, errslot, oldtop);
+    gc2_errfin_vmevent_claimed(L, claim, errslot, oldtop, 0);
     return 0;
   }
   return 1;
@@ -5986,10 +6004,10 @@ static int gc2_call_finalizer(global_State *g, lua_State *L,
   if (errcode) {
     ptrdiff_t errslot = savestack(cbL, cbL->top-1);
     cbL->base = restorestack(cbL, oldbase);
-    gc2_errfin_vmevent_claimed(cbL, &claim, errslot, oldtop);
+    gc2_errfin_vmevent_claimed(cbL, &claim, errslot, oldtop, 2+LJ_FR2);
   } else {
     cbL->base = restorestack(cbL, oldbase);
-    cbL->top = restorestack(cbL, oldtop);
+    gc2_finalizer_restore_top(cbL, oldtop, 2+LJ_FR2);
     lj_state_dropclaim(&claim);
   }
   return continue_gc;
