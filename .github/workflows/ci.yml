@@ -44,6 +44,16 @@ jobs:
           clang -O2 -mcx16 $checks -Isrc tests/t-lockless-progress-metrics.c \
             src/libluajit.a -lm -ldl -pthread -o "$RUNNER_TEMP/lj-progress"
           timeout 30 "$RUNNER_TEMP/lj-progress"
+      - name: Check the Linux runtime with UndefinedBehaviorSanitizer
+        env:
+          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
+        run: |
+          make -C src clean
+          make -C src -j2 CC=clang BUILDMODE=static \
+            XCFLAGS='-DLUA_USE_ASSERT -DLUA_USE_APICHECK' \
+            TARGET_CFLAGS='-fsanitize=undefined -fno-omit-frame-pointer' \
+            TARGET_LDFLAGS=-fsanitize=undefined
+          tools/ci/linux_x64_shared.sh
 
   macos:
     name: macOS x86_64 build/run
