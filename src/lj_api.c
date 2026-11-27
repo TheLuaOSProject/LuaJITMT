@@ -3798,9 +3798,10 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
     {
       uint32_t budget = data > 0 ? (uint32_t)data : 1u;
       int scope;
-      if (LJ_UNLIKELY(gc2_finalizer_active_acq(g)) &&
-          lj_gc2_step_owned_finalizers(L, budget))
+      if (LJ_UNLIKELY(gc2_finalizer_active_acq(g))) {
+        res = lj_gc2_step_reentrant(L, budget);
         break;
+      }
       scope = lj_str_gc2_reclaim_request(g, LJ_STR_RECLAIM_STEP);
       if (scope > 0) {
 	ApiGCStep step = { budget, 0 };

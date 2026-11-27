@@ -1,22 +1,24 @@
 local ffi = require("ffi")
 
-local function check(outer, inner, kind, fresh)
+local function check(outer, inner, kind, fresh, initial, budget)
   local calls, depth, nested, returned = 0, 0, 0, false
   local kept = {}
   local make
-  local count = fresh and 3 or 2
+  local count = initial + (fresh and 1 or 0)
   local function finish(obj, id)
     depth, calls = depth + 1, calls + 1
     kept[id] = obj
     if depth == 1 and calls == 1 then
-      if fresh then make(3) end
+      if fresh then make(count) end
       if inner == "collect" then
         collectgarbage()
       else
+        local complete = false
         for i = 1, 256 do
-          if nested ~= 0 then break end
-          collectgarbage("step", 1)
+          if collectgarbage("step", budget) then complete = true end
+          if nested == count - 1 and (complete or not fresh) then break end
         end
+        if fresh then assert(complete) end
       end
       returned = nested == count - 1 and depth == 1 and kept[id] == obj
     elseif depth == 2 then
@@ -36,14 +38,13 @@ local function check(outer, inner, kind, fresh)
 
   collectgarbage()
   collectgarbage("stop")
-  make(1)
-  make(2)
+  for id = 1, initial do make(id) end
   collectgarbage("restart")
   if outer == "collect" then
     collectgarbage()
   else
     for i = 1, 4096 do
-      if calls >= 2 then break end
+      if calls >= count then break end
       collectgarbage("step", 1)
     end
   end
@@ -64,8 +65,9 @@ end
 for _, outer in ipairs({"step", "collect"}) do
   for _, inner in ipairs({"step", "collect"}) do
     for _, kind in ipairs({"userdata", "cdata", "mixed"}) do
-      check(outer, inner, kind, false)
-      if inner == "collect" then check(outer, inner, kind, true) end
+      check(outer, inner, kind, false, 2, 1)
+      check(outer, inner, kind, true, 2, 1)
+      if inner == "step" then check(outer, inner, kind, true, 1, 64) end
     end
   end
 end
