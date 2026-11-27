@@ -1018,25 +1018,74 @@ uint32_t lj_gc_repair_root_spine(global_State *g)
 /* Type of GC free functions. */
 typedef void (LJ_FASTCALL *GCFreeFunc)(global_State *g, GCobj *o);
 
+static void LJ_FASTCALL gc_free_string(global_State *g, GCobj *o)
+{
+  lj_str_free(g, gco2str(o));
+}
+
+static void LJ_FASTCALL gc_free_upvalue(global_State *g, GCobj *o)
+{
+  lj_func_freeuv(g, gco2uv(o));
+}
+
+static void LJ_FASTCALL gc_free_thread(global_State *g, GCobj *o)
+{
+  lj_state_free(g, gco2th(o));
+}
+
+static void LJ_FASTCALL gc_free_proto(global_State *g, GCobj *o)
+{
+  lj_func_freeproto(g, gco2pt(o));
+}
+
+static void LJ_FASTCALL gc_free_function(global_State *g, GCobj *o)
+{
+  lj_func_free(g, gco2func(o));
+}
+
+#if LJ_HASJIT
+static void LJ_FASTCALL gc_free_trace(global_State *g, GCobj *o)
+{
+  lj_trace_free(g, gco2trace(o));
+}
+#endif
+
+#if LJ_HASFFI
+static void LJ_FASTCALL gc_free_cdata(global_State *g, GCobj *o)
+{
+  lj_cdata_free(g, gco2cd(o));
+}
+#endif
+
+static void LJ_FASTCALL gc_free_table(global_State *g, GCobj *o)
+{
+  lj_tab_free(g, gco2tab(o));
+}
+
+static void LJ_FASTCALL gc_free_userdata(global_State *g, GCobj *o)
+{
+  lj_udata_free(g, gco2ud(o));
+}
+
 /* GC free functions for LJ_TSTR .. LJ_TUDATA. ORDER LJ_T */
 static const GCFreeFunc gc_freefunc[] = {
-  (GCFreeFunc)lj_str_free,
-  (GCFreeFunc)lj_func_freeuv,
-  (GCFreeFunc)lj_state_free,
-  (GCFreeFunc)lj_func_freeproto,
-  (GCFreeFunc)lj_func_free,
+  gc_free_string,
+  gc_free_upvalue,
+  gc_free_thread,
+  gc_free_proto,
+  gc_free_function,
 #if LJ_HASJIT
-  (GCFreeFunc)lj_trace_free,
+  gc_free_trace,
 #else
-  (GCFreeFunc)0,
+  NULL,
 #endif
 #if LJ_HASFFI
-  (GCFreeFunc)lj_cdata_free,
+  gc_free_cdata,
 #else
-  (GCFreeFunc)0,
+  NULL,
 #endif
-  (GCFreeFunc)lj_tab_free,
-  (GCFreeFunc)lj_udata_free
+  gc_free_table,
+  gc_free_userdata
 };
 
 static int gc2_free_body_info(global_State *g, GCobj *o, void **basep,
