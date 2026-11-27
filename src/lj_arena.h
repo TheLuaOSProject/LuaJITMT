@@ -7,6 +7,7 @@
 #define _LJ_ARENA_H
 
 #include "lj_def.h"
+#include "lj_arch.h"
 #include "lj_atomic.h"
 #include "lj_gc2token.h"
 
@@ -37,6 +38,7 @@
 ** list until adoption or another gate-generation owner invalidates it. This
 ** is never an allocation request and live_cells is not its authority. */
 #define LJ_AF_EMPTY_RECLAIMED	0x00000080u
+#define LJ_AF_HOST_BACKED	0x00000100u  /* Immutable backing provenance. */
 /* Allocation-request modifier. This bit is consumed by the allocator and is
 ** never persisted in GCAhdr.flags or ordinary HugeTab metadata. */
 #define LJ_AF_DTOR_CONSTRUCT	0x40000000u
@@ -478,6 +480,9 @@ struct TGAlloc {
   ** head contributes no live bytes, but all lifetime/capacity walkers must
   ** include it. No published interior list link may be rewritten. */
   GCArena *empty_reclaimed;
+#if LJ_HAS_ARENA_HOST_ALLOC
+  const la_u128 *host_alloc;  /* Heap-wide callback pair, or NULL. */
+#endif
 };
 
 /* Remote readers retain the allocator's lifetime and exclude its private
@@ -648,6 +653,11 @@ LJ_FUNC uint32_t lj_arena_count_free_runs(const GCArena *a);
 ** retain mappings; NONE tokens may carry nonzero generations after reuse. */
 LJ_FUNC int lj_arena_gc2_tokens_empty_acq(const GCArena *a);
 LJ_FUNC GCArena *lj_arena_map(PRNGState *rs, uint32_t flags);
+#if LJ_HAS_ARENA_HOST_ALLOC
+LJ_FUNC lua_Alloc lj_arena_host_get(const la_u128 *host, void **ud);
+LJ_FUNC void lj_arena_host_set(la_u128 *host, lua_Alloc f, void *ud);
+LJ_FUNC void lj_arena_huge_bind_host(void *p, const la_u128 *host);
+#endif
 LJ_FUNC void lj_arena_unmap(GCArena *a);
 /* Physical extent for either Huge kind: header + requested payload capacity +
 ** one aligned 16-byte tail reservation, rounded to the arena quantum.

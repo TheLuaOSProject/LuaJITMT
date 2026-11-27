@@ -10,6 +10,7 @@ local M2_ORDER = {
   "m2_arena_publication",
   "m2_arena_map",
   "m2_arena_alloc",
+  "m2_allocator_embedding",
   "m2_arena_bin_capacity",
   "m2_arena_rebuild_bump",
   "m2_arena_plain_late",
@@ -105,6 +106,16 @@ return function(add)
       run_standalone_fixture(t, out .. ".alloc", "t-arena-alloc.c")
       run_standalone_fixture(t, out .. ".realloc", "t-arena-realloc.c")
       run_standalone_fixture(t, out .. ".allocf", "t-arena-allocf.c")
+    end
+  })
+
+  register({
+    name = "m2_allocator_embedding",
+    description = "public allocator bootstrap, replacement, and parallel callbacks",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then return end
+      build_and_run_c(t, t:tmp("lj_t_allocator_embedding"),
+                      "t-allocator-embedding.c", { timeout = "30s" })
     end
   })
 

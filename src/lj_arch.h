@@ -684,6 +684,9 @@
 /* 2-slot frame info. */
 #define LJ_FR2			1
 
+/* Public allocator callbacks back arena storage on Linux x86-64. */
+#define LJ_HAS_ARENA_HOST_ALLOC (LJ_TARGET_X64 && LJ_TARGET_LINUX)
+
 /* Disable or enable the JIT compiler. */
 #if defined(LUAJIT_DISABLE_JIT) || defined(LJ_ARCH_NOJIT) || defined(LJ_OS_NOJIT)
 #define LJ_HASJIT		0

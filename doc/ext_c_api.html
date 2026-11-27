@@ -69,6 +69,32 @@ Or for C++ code:
 #include "lua.hpp"
 </pre>
 
+<h2 id="arena_allocator">Allocator callbacks on Linux x86-64</h2>
+<p>
+LuaJIT-MT uses a <tt>lua_Alloc</tt> supplied to <tt>lua_newstate</tt> to obtain
+the state storage, arena slabs, and large allocation backing. A slab normally
+holds several Lua allocations. The callback receives the original pointer
+and size of each backing block when it is released. Callback requests
+include space for arena metadata and alignment. If the callback refuses
+a backing allocation, <tt>lua_newstate</tt> can return <tt>NULL</tt> or an
+operation on an existing state can report a Lua memory error.
+</p>
+<p>
+<tt>lua_getallocf</tt> and <tt>lua_setallocf</tt> read and replace the
+allocator and userdata for the entire state, including its Lua threads.
+A replacement must be compatible with outstanding callback blocks. To
+wrap an allocator, save the pair returned by <tt>lua_getallocf</tt> and
+forward requests to it. The allocator active at release time receives
+the free request for a callback block. Built-in arena mappings and the
+runtime's fixed directories, OS thread resources, and executable mappings
+use their native allocation and release paths.
+</p>
+<p>
+When a state uses native Lua or garbage collector threads, callbacks may run
+concurrently on those threads. Keep callback userdata valid while its
+allocator is installed and until calls already in progress have finished.
+</p>
+
 <h2 id="luaJIT_setmode"><tt>luaJIT_setmode(L, idx, mode)</tt>
 &mdash; Control VM</h2>
 <p>

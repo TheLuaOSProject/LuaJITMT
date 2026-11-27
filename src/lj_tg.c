@@ -435,6 +435,9 @@ void lj_tg_init_thread(global_State *g, TGState *tg, lua_State *L,
   lj_arena_alloc_init(&tg->alloc);
   if (arena_internal) {
     lj_tg_flags_or_rlx(tg, TGF_ARENA_INTERNAL);
+#if LJ_HAS_ARENA_HOST_ALLOC
+    tg->alloc.host_alloc = &G2GG(g)->arena_host_alloc;
+#endif
     lj_arena_alloc_set_registry(&tg->alloc,
       (HugeTab *)gc2_small_arena_tab_acq(g));
   }

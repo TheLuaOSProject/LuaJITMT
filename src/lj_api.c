@@ -27,6 +27,7 @@
 #include "lj_bc.h"
 #include "lj_frame.h"
 #include "lj_trace.h"
+#include "lj_dispatch.h"
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_vm.h"
@@ -3829,14 +3830,20 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
 
 LUA_API lua_Alloc lua_getallocf(lua_State *L, void **ud)
 {
+#if LJ_HAS_ARENA_HOST_ALLOC
+  return lj_arena_host_get(&L2GG(L)->arena_host_alloc, ud);
+#else
   global_State *g = G(L);
   if (ud) *ud = g->allocd;
   return g->allocf;
+#endif
 }
 
 LUA_API void lua_setallocf(lua_State *L, lua_Alloc f, void *ud)
 {
-#if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
+#if LJ_HAS_ARENA_HOST_ALLOC
+  lj_arena_host_set(&L2GG(L)->arena_host_alloc, f, ud);
+#elif LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   /* Temporary GC2 policy: preserve the arena ownership domain. */
   UNUSED(L); UNUSED(f); UNUSED(ud);
 #else

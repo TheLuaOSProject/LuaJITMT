@@ -1828,6 +1828,7 @@ static void arena_test_lifetime_pause_after_claim(void)
 #define arena_test_lifetime_pause_after_claim() ((void)0)
 #endif
 LJ_STATIC_ASSERT((LJ_AF_HUGE_MAGIC & LJ_AF_FLAG_MASK) == 0);
+LJ_STATIC_ASSERT((LJ_AF_HOST_BACKED & (LJ_AF_HUGE_MAGIC|LJ_AF_FLAG_MASK)) == 0);
 
 /* Destructive bitmap transforms precede the allocator/free-run helpers below,
 ** but share their exact lifetime-release operations. */
@@ -2089,19 +2090,135 @@ static void arena_os_unmap(void *p, size_t size)
 }
 #endif
 
-GCArena *lj_arena_map(PRNGState *rs, uint32_t flags)
+typedef struct LJArenaHostSpan {
+  const la_u128 *host;
+  void *raw;
+  size_t size;
+} LJArenaHostSpan;
+
+static void *arena_host_default(void *ud, void *p, size_t osize, size_t nsize)
+{
+  UNUSED(ud);
+  if (nsize) {
+    void *q = realloc(p, nsize);
+    return q || nsize > osize ? q : p;
+  }
+  free(p);
+  return NULL;
+}
+
+static la_u128 arena_host_snapshot(const la_u128 *host)
+{
+  la_u128 builtin = { 0, 0 };
+  /* The default path needs only a load. A custom allocator and its context
+  ** are sampled together, including when another actor restores the default. */
+  return host && la_load64_acq(&host->lo) ? la_load128_acq(host) : builtin;
+}
+
+#if LJ_HAS_ARENA_HOST_ALLOC
+lua_Alloc lj_arena_host_get(const la_u128 *host, void **ud)
+{
+  la_u128 pair = arena_host_snapshot(host);
+  if (ud)
+    *ud = (void *)(uintptr_t)pair.hi;
+  return pair.lo ? (lua_Alloc)(uintptr_t)pair.lo : arena_host_default;
+}
+
+void lj_arena_host_set(la_u128 *host, lua_Alloc f, void *ud)
+{
+  la_u128 next = { 0, 0 }, old = la_load128_acq(host);
+  if (f && (f != arena_host_default || ud)) {
+    next.lo = (uintptr_t)f;
+    next.hi = (uintptr_t)ud;
+  }
+  while (!la_cas128(host, &old, next))
+    ;
+}
+#endif
+
+static LJArenaHostSpan *arena_host_span(GCArena *a)
+{
+  return (LJArenaHostSpan *)((char *)a - sizeof(LJArenaHostSpan));
+}
+
+static GCArena *arena_backing_map(PRNGState *rs, size_t keep, size_t extra,
+				 const la_u128 *host, uint32_t *flags)
+{
+  la_u128 pair = arena_host_snapshot(host);
+  if (pair.lo) {
+    const size_t padding = LJ_ARENA_MASK + sizeof(LJArenaHostSpan);
+    lua_Alloc f = (lua_Alloc)(uintptr_t)pair.lo;
+    void *ud = (void *)(uintptr_t)pair.hi, *raw;
+    uintptr_t aligned;
+    LJArenaHostSpan *span;
+    size_t size;
+    if (!arena_addr_ok(LJ_ARENA_MMAP_LOWER, keep) ||
+	keep > SIZE_MAX - extra - padding)
+      return NULL;
+    size = keep + extra + padding;
+    raw = f(ud, NULL, 0, size);
+    if (!raw)
+      return NULL;
+    aligned = ((uintptr_t)raw + padding) & ~(uintptr_t)LJ_ARENA_MASK;
+    if (aligned < (uintptr_t)raw || !arena_addr_ok(aligned, keep)) {
+      f(ud, raw, size, 0);
+      return NULL;
+    }
+    span = arena_host_span((GCArena *)aligned);
+    span->host = host;
+    span->raw = raw;
+    span->size = size;
+    *flags |= LJ_AF_HOST_BACKED;
+    return (GCArena *)aligned;
+  }
+  return (GCArena *)arena_map_aligned(rs, keep);
+}
+
+static void arena_backing_unmap(GCArena *a, size_t size)
+{
+  if (lj_arena_flags_acq(a) & LJ_AF_HOST_BACKED) {
+    LJArenaHostSpan *span = arena_host_span(a);
+    la_u128 pair = arena_host_snapshot(span->host);
+    lua_Alloc f = pair.lo ? (lua_Alloc)(uintptr_t)pair.lo : arena_host_default;
+    /* Use the current compatible allocator. A temporary wrapper can be
+    ** restored before its context expires, even with live spans. */
+    f((void *)(uintptr_t)pair.hi, span->raw, span->size, 0);
+  } else {
+    arena_unmap_aligned((void *)a, size);
+  }
+}
+
+static const la_u128 *arena_alloc_host(const TGAlloc *alloc)
+{
+#if LJ_HAS_ARENA_HOST_ALLOC
+  return alloc->host_alloc;
+#else
+  UNUSED(alloc);
+  return NULL;
+#endif
+}
+
+static GCArena *arena_map(PRNGState *rs, uint32_t flags, const la_u128 *host)
 {
   int olderr = errno;
-  GCArena *a = (GCArena *)arena_map_aligned(rs, LJ_ARENA_SIZE);
+  size_t extra = flags & LJ_AF_TRAVERSABLE ? sizeof(LJGC2TabStampArena) : 0;
+  uint32_t aflags = flags & (LJ_AF_FLAG_MASK & ~LJ_AF_EMPTY_RECLAIMED);
+  GCArena *a = arena_backing_map(rs, LJ_ARENA_SIZE, extra, host, &aflags);
   if (a) {
     LJGC2TabStampArena *side = NULL;
     memset(a, 0, sizeof(*a));
-    a->hdr.flags = flags & (LJ_AF_FLAG_MASK & ~LJ_AF_EMPTY_RECLAIMED);
+    a->hdr.flags = aflags;
     if (flags & LJ_AF_TRAVERSABLE) {
-      if (!arena_test_gc2_sidecar_alloc_fails())
-	side = (LJGC2TabStampArena *)calloc(1, sizeof(*side));
+      if (!arena_test_gc2_sidecar_alloc_fails()) {
+	if (aflags & LJ_AF_HOST_BACKED) {
+	  side = (LJGC2TabStampArena *)((char *)a + LJ_ARENA_SIZE);
+	  memset(side, 0, sizeof(*side));
+	} else {
+	  side = (LJGC2TabStampArena *)calloc(1, sizeof(*side));
+	}
+      }
       if (!side) {
-	arena_unmap_aligned((void *)a, LJ_ARENA_SIZE);
+	arena_backing_unmap(a, LJ_ARENA_SIZE);
 	errno = olderr;
 	return NULL;
       }
@@ -2112,6 +2229,11 @@ GCArena *lj_arena_map(PRNGState *rs, uint32_t flags)
   }
   errno = olderr;
   return a;
+}
+
+GCArena *lj_arena_map(PRNGState *rs, uint32_t flags)
+{
+  return arena_map(rs, flags, NULL);
 }
 
 #define LJ_ARENA_REMOTE_TERMINAL \
@@ -2192,8 +2314,9 @@ static LJ_AINLINE int arena_unmap_side_empty(const GCArena *a)
 
 static void arena_unmap_claimed(GCArena *a)
 {
-  free(lj_arena_gc2_tabstamp_acq(a));
-  arena_unmap_aligned((void *)a, LJ_ARENA_SIZE);
+  if (!(lj_arena_flags_acq(a) & LJ_AF_HOST_BACKED))
+    free(lj_arena_gc2_tabstamp_acq(a));
+  arena_backing_unmap(a, LJ_ARENA_SIZE);
 }
 
 void lj_arena_unmap(GCArena *a)
@@ -2233,30 +2356,52 @@ size_t lj_arena_huge_mapsize(size_t size)
   return (need + LJ_ARENA_MASK) & ~(size_t)LJ_ARENA_MASK;
 }
 
-void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags)
+static void *arena_huge_map(PRNGState *rs, size_t size, uint32_t flags,
+			   const la_u128 *host)
 {
+  int olderr = errno;
   size_t mapsize = lj_arena_huge_mapsize(size);
+  uint32_t aflags = LJ_AF_HUGE_MAGIC |
+    (flags & (LJ_AF_FLAG_MASK & ~LJ_AF_EMPTY_RECLAIMED));
   GCArena *a;
   if (!mapsize)
     return NULL;
-  a = (GCArena *)arena_map_aligned(rs, mapsize);
+  a = arena_backing_map(rs, mapsize, 0, host, &aflags);
+  errno = olderr;
   if (!a)
     return NULL;
   memset(&a->hdr, 0, sizeof(a->hdr));
-  a->hdr.flags = LJ_AF_HUGE_MAGIC |
-    (flags & (LJ_AF_FLAG_MASK & ~LJ_AF_EMPTY_RECLAIMED));
+  a->hdr.flags = aflags;
   a->hdr.huge_mapsize = mapsize;
   if (flags & LJ_AF_TRAVERSABLE) {
     LJGC2TabWideStamp *wide = (LJGC2TabWideStamp *)
       ((char *)a + mapsize - sizeof(LJGC2TabWideStamp));
-    /* arena_map_aligned returns fresh anonymous zero-filled storage. This
-    ** initializes the whole W before publication without touching its page.
-    ** W stays at this physical tail across same-extent logical reallocs.
-    ** No recycled/dirty mapping may enter this private initialization path. */
+    /* Anonymous mappings are already zeroed. Callback memory can be reused
+    ** and must initialize the wide stamp before publishing its address. The
+    ** stamp stays at the physical tail across logical reallocations. */
+    if (aflags & LJ_AF_HOST_BACKED)
+      memset(wide, 0, sizeof(*wide));
     la_storeptr_rel((void **)&a->hdr.gc2_huge_wide, wide);
   }
   return (void *)((char *)a + sizeof(GCAhdr));
 }
+
+void *lj_arena_huge_map(PRNGState *rs, size_t size, uint32_t flags)
+{
+  return arena_huge_map(rs, size, flags, NULL);
+}
+
+#if LJ_HAS_ARENA_HOST_ALLOC
+void lj_arena_huge_bind_host(void *p, const la_u128 *host)
+{
+  GCArena *a = lj_arena_of(p);
+  lj_assertX(lj_arena_ishuge(a), "bootstrap state needs a huge arena");
+  /* The bootstrap mapping is still private while its allocator pair moves
+  ** from the C stack into its final home in the new state. */
+  if (lj_arena_flags_acq(a) & LJ_AF_HOST_BACKED)
+    arena_host_span(a)->host = host;
+}
+#endif
 
 void lj_arena_huge_unmap(void *p, size_t size)
 {
@@ -2272,7 +2417,7 @@ void lj_arena_huge_unmap(void *p, size_t size)
         (mapsize & LJ_ARENA_MASK) == 0 &&
         lj_arena_gc2_tokens_empty_acq(a) &&
 	lj_arena_gc2_desc_mapping_clear_acq(a)) {
-      arena_unmap_aligned((void *)a, mapsize);
+      arena_backing_unmap(a, mapsize);
     }
   }
   errno = olderr;
@@ -2284,7 +2429,7 @@ void lj_arena_huge_unmap_claimed(void *p, size_t size)
   size_t mapsize = lj_arena_huge_mapsize(size);
   if (p && mapsize) {
     GCArena *a = lj_arena_of(p);
-    arena_unmap_aligned((void *)a, mapsize);
+    arena_backing_unmap(a, mapsize);
   }
   errno = olderr;
 }
@@ -8655,7 +8800,7 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
 				  uint32_t flags)
 {
   uint32_t k = arena_kind(flags);
-  GCArena *a = lj_arena_map(rs, flags);
+  GCArena *a = arena_map(rs, flags, arena_alloc_host(alloc));
   if (!a)
     return NULL;
   lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
@@ -8985,7 +9130,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
     ** allocd path below owns that locator; the direct mapping API does not. */
     if (flags & LJ_AF_ROOT_CONSTRUCT)
       return NULL;
-    p = lj_arena_huge_map(rs, size, flags);
+    p = arena_huge_map(rs, size, flags, arena_alloc_host(alloc));
     if (p) {
       GCArena *a = lj_arena_of(p);
       TGState *owner_tg =
@@ -9420,7 +9565,7 @@ static void *arena_allocf_new(LJArenaAllocD *ad, size_t size, uint32_t flags)
     return NULL;
   if (!ad->huge || size <= LJ_HUGE_THRESHOLD)
     return lj_arena_alloc(ad->alloc, ad->prng, size, flags);
-  p = lj_arena_huge_map(ad->prng, size, flags);
+  p = arena_huge_map(ad->prng, size, flags, arena_alloc_host(ad->alloc));
   if (p) {
     GCArena *a = lj_arena_of(p);
     TGState *owner_tg =

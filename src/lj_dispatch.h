@@ -94,6 +94,9 @@ typedef struct GG_State {
   ASMFunction dispatch[GG_LEN_DISP];	/* Instruction dispatch tables. */
   BCIns bcff[GG_NUM_ASMFF];		/* Bytecode for ASM fast functions. */
   TGState main_tg;			/* Main per-OS-thread state. */
+#if LJ_HAS_ARENA_HOST_ALLOC
+  la_u128 arena_host_alloc;		/* Public allocator and userdata. */
+#endif
 } GG_State;
 
 #define GG_OFS(field)	((int)offsetof(GG_State, field))

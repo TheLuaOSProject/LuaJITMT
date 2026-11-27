@@ -1221,7 +1221,13 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   global_State *g;
   uint32_t tid;
   int arena_internal = 0;
-#if LJ_GC2_INTERNAL_ALLOCATOR_ONLY
+#if LJ_HAS_ARENA_HOST_ALLOC
+  la_u128 boot_host = { 0, 0 };
+  if (allocf != LJ_ALLOCF_INTERNAL)
+    lj_arena_host_set(&boot_host, allocf, allocd);
+  allocf = LJ_ALLOCF_INTERNAL;
+  allocd = NULL;
+#elif LJ_GC2_INTERNAL_ALLOCATOR_ONLY
   /* The callback remains in the ABI, but is deliberately not invoked yet. */
   allocf = LJ_ALLOCF_INTERNAL;
   allocd = NULL;
@@ -1245,6 +1251,9 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
     return NULL;
   if (allocf == LJ_ALLOCF_INTERNAL) {
     lj_arena_alloc_init(&boot_alloc);
+#if LJ_HAS_ARENA_HOST_ALLOC
+    boot_alloc.host_alloc = &boot_host;
+#endif
     lj_arena_allocd_init(&boot_ad, &boot_alloc, &prng, 0);
     allocf = lj_arena_allocf;
     allocd = &boot_ad;
@@ -1270,6 +1279,11 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
 #endif
   if (arena_internal) {
     GG->main_tg.alloc = boot_alloc;
+#if LJ_HAS_ARENA_HOST_ALLOC
+    GG->arena_host_alloc = boot_host;
+    GG->main_tg.alloc.host_alloc = &GG->arena_host_alloc;
+    lj_arena_huge_bind_host(GG, &GG->arena_host_alloc);
+#endif
     GG->main_tg.prng = prng;
     lj_arena_allocd_init(&GG->main_tg.allocd, &GG->main_tg.alloc,
 			 &GG->main_tg.prng, 0);
