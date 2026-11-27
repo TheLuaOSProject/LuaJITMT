@@ -31,6 +31,9 @@ for script in t-gc-workers t-threading-join-lifetime t-jit-fnew-inherited \
   echo "$script"
   timeout 180 "$bin" "tests/$script.lua"
 done
+for jit in -jon -joff; do
+  timeout 90 "$bin" "$jit" tests/t-threading-parked-finalizers.lua
+done
 LJ_M5_TAB_RESIZE_STRESS_CASES=jitstore,jitread,jititer \
   timeout 180 "$bin" tests/t-tab-resize-stress.lua
 LJ_MT_SOAK_SECONDS=0 timeout 180 "$bin" -jon tests/stress/kitchen.lua 8 4 2 19

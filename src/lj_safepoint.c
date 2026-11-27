@@ -526,12 +526,11 @@ static void safepoint_requeue_consumed(TGState *tg, uint32_t actions)
   lj_tg_poll_futex_wake(tg, 1);
 }
 
-static int safepoint_str_vm_frame(lua_State *L, TGState *tg)
+int lj_safepoint_outer_lua_frame(lua_State *L, TGState *tg)
 {
   global_State *g = G(L);
   void *parent;
-  if (tg != lj_thr_get_tg_fallback(g) || !L->cframe ||
-      lj_tg_in_native_acq(tg) || lj_tg_load_jit_base(tg))
+  if (!L->cframe || lj_tg_load_jit_base(tg))
     return 0;
   parent = cframe_raw(cframe_prev(cframe_raw(L->cframe)));
   if (tg == g->main_tg) {
@@ -552,6 +551,12 @@ static int safepoint_str_vm_frame(lua_State *L, TGState *tg)
 #endif
 #endif
   return 1;
+}
+
+static int safepoint_str_vm_frame(lua_State *L, TGState *tg)
+{
+  return tg == lj_thr_get_tg_fallback(G(L)) && !lj_tg_in_native_acq(tg) &&
+	 lj_safepoint_outer_lua_frame(L, tg);
 }
 
 void lj_safepoint_channel_park_checkpoint(lua_State *L, TGState *tg)

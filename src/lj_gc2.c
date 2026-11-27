@@ -35,6 +35,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #include "lj_arena.h"
 #include "lj_tg.h"
 #include "lj_frame.h"
+#include "lj_ff.h"
 #include "lj_state.h"
 #include "lj_lex.h"
 #if LJ_HASFFI
@@ -8404,6 +8405,7 @@ static int gc2_frame_prev_safe(global_State *g, TValue *bot, TValue *max,
     goto fail;
   if (frame_islua(frame)) {
     const BCIns *pc;
+    ptrdiff_t slots;
     pc = frame_pc(frame);
     if ((uintptr_t)pc < sizeof(BCIns) ||
         !gc2_bcins_valid_scoped(g, (const BCIns *)((uintptr_t)pc - sizeof(BCIns)),
@@ -8416,7 +8418,10 @@ static int gc2_frame_prev_safe(global_State *g, TValue *bot, TValue *max,
     ** lease deliberately does not change MARK: caller-function traversal owns
     ** the semantic proto edge, while owner authority keeps the frame word
     ** stable through this body read. */
-    prev = frame - (1 + LJ_FR2 + bc_a(pc[-1]));
+    slots = 1 + LJ_FR2 + bc_a(pc[-1]);
+    if (slots > frame - (bot + LJ_FR2))
+      goto fail;
+    prev = frame - slots;
   } else {
     ptrdiff_t sz = frame_sized(frame);
     if (sz <= 0 || (uintptr_t)sz > (uintptr_t)((char *)frame -
@@ -8691,7 +8696,28 @@ static int gc2_stack_tv_admit_scoped(global_State *g, lua_State *L,
   return status;
 }
 
-static TValue *gc2_stack_scan_top(global_State *g, lua_State *L,
+/* These waits hold their Lua arguments on the stack. At a consumed native
+** park the outer interpreter activation is stable, including its caller
+** frames. Storage above every active frame can contain old weak referents. */
+static int gc2_parked_wait_frame(global_State *g, lua_State *L)
+{
+  TGState *tg = lj_tg_thread_active(g, L);
+  TValue *frame = L->base - 1;
+  GC2FrameScope scope;
+  GCfunc *fn;
+  uint32_t ffid;
+  if (!tg || !lj_safepoint_outer_lua_frame(L, tg) ||
+      frame <= tvref(L->stack) + LJ_FR2 || frame >= tvref(L->maxstack) ||
+      !gc2_frame_func_valid(g, frame, &fn, NULL, &scope))
+    return 0;
+  ffid = lj_func_ffid_acq(fn);
+  gc2_frame_scope_leave(&scope);
+  return ffid == FF_threading_channel_send ||
+	 ffid == FF_threading_channel_recv || ffid == FF_threading_thread_join ||
+	 ffid == FF_threading_sleep || ffid == FF_threading_mutex_lock;
+}
+
+static TValue *gc2_stack_scan_top(global_State *g, lua_State *L, int parked,
 				  int *conservativep)
 {
   TValue *frame, *bot = tvref(L->stack);
@@ -8701,9 +8727,10 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L,
   int remote_current = gc2_thread_is_remote_current(g, L);
   int native_current = gc2_thread_is_native_current(g, L);
   int jit_current = gc2_thread_is_jit_current(g, L);
+  int parked_wait = parked && !jit_current && gc2_parked_wait_frame(g, L);
   if (conservativep)
-    *conservativep = 0;
-  if (remote_current || native_current || jit_current) {
+    *conservativep = parked_wait;
+  if ((remote_current || native_current || jit_current) && !parked_wait) {
     gc2_mark_frame_chain_funcs(g, L);
 #if LJ_HASJIT
     if (jit_current)
@@ -8760,6 +8787,8 @@ static TValue *gc2_stack_scan_top(global_State *g, lua_State *L,
   used++;
   if (used > max)
     used = max;
+  if (parked_wait)
+    return used;  /* Includes L->top and the full extent of each Lua frame. */
   if (vm_current && L->base > bot + 1 + LJ_FR2) {
     top = gc2_active_thread_top(g, L, top, NULL);
     /*
@@ -9045,7 +9074,7 @@ static int gc2_scan_thread_stack(global_State *g, lua_State *L,
   ** Mark the identity without queueing a duplicate gc2_traverse_thread pass. */
   (void)lj_gc2_markobj_nogrey(g, obj2gco(L));
   lj_gc2_markmem(g, tvref(L->stack));
-  top = gc2_stack_scan_top(g, L, &conservative);
+  top = gc2_stack_scan_top(g, L, parked, &conservative);
   for (o = tvref(L->stack) + 1 + LJ_FR2; o < top; o++) {
     lj_tv_load_acq(&tv, o);
     if (conservative) {
@@ -10523,9 +10552,8 @@ static int gc2_scan_cycle_owner_tg_roots_mode(global_State *g, TGState *tg,
 #else
   UNUSED(native_parked);
 #endif
-  /* Exact native-frame marking is deliberately additive. The conservative
-  ** owner scan, including native/JIT maxstack widening and every NEEDSCAN
-  ** handoff, remains authoritative until the later narrowing proof. */
+  /* The native-frame roots supplement the owner stack and its NEEDSCAN work.
+  ** Only a validated outer interpreter wait can bound a parked stack. */
   if (exact)
     exact = gc2_scan_owner_tg_roots(g, tg, native_parked);
   lj_gc2_smr_read_leave(g);
