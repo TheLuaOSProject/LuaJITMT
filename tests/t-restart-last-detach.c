@@ -21,6 +21,7 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_vm.h"
+#include "lib/gc_pending_request.h"
 #include "lib/x64_store_probe.h"
 
 /* Linux x64 trap stepping pauses a real external last detach after its saved
@@ -116,13 +117,7 @@ int main(void)
   assert(pthread_create(&attach, NULL, attach_main, NULL) == 0);
   wait_for(&probe.attached);
   assert(lj_gc_mt_threshold_load(g) != LJ_MAX_MEM);
-  for (i = 0; i < 8192 && gc2_cycle_leader_acq(g) == 0; i++) {
-    char buf[65];
-    int n = snprintf(buf, sizeof(buf), "stop-overlap:%08x:", i);
-    assert(n > 0 && n < 64);
-    memset(buf + n, 'x', 64u - (unsigned)n);
-    lua_pushlstring(L, buf, 64); lua_pop(L, 1);
-  }
+  assert(lua_cpcall(L, request_gc_through_strings, NULL) == 0);
   assert(gc2_cycle_leader_acq(g) != 0 && gc2_phase_acq(g) == LJ_GC2_IDLE);
   /* The pending trigger can leave part of its allocation batch local. */
   (void)lj_gc2_flush_alloc(g, L2TG(L));

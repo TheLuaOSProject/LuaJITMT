@@ -21,6 +21,7 @@
 #include "lj_tg.h"
 #include "lj_thr.h"
 #include "lj_vm.h"
+#include "lib/gc_pending_request.h"
 #include "lib/x64_store_probe.h"
 
 /* The only interposition single-steps a real external-attach transaction.
@@ -135,13 +136,7 @@ int main(void)
   assert(mt_live_acq(g) == 0);
   lua_gc(L, LUA_GCCOLLECT, 0);
   lua_gc(L, LUA_GCCOLLECT, 0);
-  for (i = 0; i < 8192 && gc2_cycle_leader_acq(g) == 0; i++) {
-    char buf[65];
-    int n = snprintf(buf, sizeof(buf), "stop-overlap:%08x:", i);
-    assert(n > 0 && n < 64);
-    memset(buf + n, 'x', 64u - (unsigned)n);
-    lua_pushlstring(L, buf, 64); lua_pop(L, 1);
-  }
+  assert(lua_cpcall(L, request_gc_through_strings, NULL) == 0);
   assert(gc2_cycle_leader_acq(g) != 0 && gc2_phase_acq(g) == LJ_GC2_IDLE);
   /* The pending trigger can leave part of its allocation batch local. */
   (void)lj_gc2_flush_alloc(g, L2TG(L));
