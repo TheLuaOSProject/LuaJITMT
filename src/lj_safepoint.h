@@ -75,6 +75,8 @@ typedef struct LJNativeFrame {
 LJ_FUNCA void lj_native_enter(TGState *tg);
 /* The owner or a consumed native-park handshake holds the frame stable. */
 LJ_FUNC int lj_safepoint_outer_lua_frame(lua_State *L, TGState *tg);
+/* Immediately precedes channel native entry. Revoke str_vm_channel_park
+** before leaving the futex wait and delivering any pending interrupt. */
 LJ_FUNC void lj_safepoint_channel_park_checkpoint(lua_State *L, TGState *tg);
 LJ_FUNC void lj_safepoint_reap_checkpoint(lua_State *L);
 LJ_FUNCA uint32_t lj_native_leave(lua_State *L);

@@ -12,6 +12,7 @@
 #include "lj_ccall.h"
 #include "lj_dispatch.h"
 #include "lj_err.h"
+#include "lj_ff.h"
 #include "lj_frame.h"
 #include "lj_gc2.h"
 #include "lj_mcode.h"
@@ -564,14 +565,6 @@ static int safepoint_str_vm_frame(lua_State *L, TGState *tg)
 	 lj_safepoint_outer_lua_frame(L, tg);
 }
 
-void lj_safepoint_channel_park_checkpoint(lua_State *L, TGState *tg)
-{
-  /* A channel operation entered from the outer Lua frame cannot suspend
-  ** a caller's retained C registry cursor or an outer FFI frame. */
-  if (L && tg && safepoint_str_vm_frame(L, tg))
-    lj_tg_dead_read_checkpoint(tg);
-}
-
 void lj_safepoint_reap_checkpoint(lua_State *L)
 {
   global_State *g = G(L);
@@ -679,6 +672,11 @@ retry:
       goto retry;
     return 0;
   }
+  /* Only a successful consumed-poll scan can reach here with roots_scanned.
+  ** The owner authorizes this one stable channel frame before entering the
+  ** futex. Other native operations can retain outstanding C/FFI borrows. */
+  if (roots_scanned && la_load32_acq(&tg->str_vm_channel_park))
+    la_store64_rel(&tg->str_vm_root_epoch, epoch);
   roots_scanned = safepoint_apply_tg_mode(g, tg, actions, native_parked,
 					 roots_scanned);
   if (!roots_scanned && !native_parked && safepoint_resumable_actions(actions) &&
@@ -945,9 +943,28 @@ static int safepoint_rescan_string_roots(global_State *g, TGState *tg)
   return scanned;
 }
 
-/* Only emitted after the interpreter has published BASE/PC, or after
-** native trace exit restored its stack. A remote native ACK has no such
-** authority, including when it consumes this actor's outstanding poll. */
+void lj_safepoint_channel_park_checkpoint(lua_State *L, TGState *tg)
+{
+  uint64_t epoch;
+  uint32_t ffid;
+  if (!L || !tg || !safepoint_str_vm_frame(L, tg))
+    return;
+  lj_tg_dead_read_checkpoint(tg);
+  ffid = lj_func_ffid_acq(curr_func(L));
+  if (ffid != FF_threading_channel_recv && ffid != FF_threading_channel_send)
+    return;
+  /* A local ACK can win as the previous wait ends. Its restored frame can
+  ** witness that epoch too, after an actual owner-side rescan. */
+  epoch = la_load64_acq(&tg->str_owner_scan_epoch);
+  if (epoch > la_load64_acq(&tg->str_vm_root_epoch) &&
+      (lj_str_qcount_acq(G(L)) || lj_str_reclaim_requested_acq(G(L))) &&
+      safepoint_rescan_string_roots(G(L), tg))
+    la_store64_rel(&tg->str_vm_root_epoch, epoch);
+  la_store32_rel(&tg->str_vm_channel_park, 1);
+}
+
+/* Interpreter dispatch publishes BASE/PC and native trace exit restores
+** its stack. Ordinary native ACKs cannot certify either boundary. */
 static void safepoint_vm_scan(lua_State *L, int trace_exit)
 {
   global_State *g = G(L);

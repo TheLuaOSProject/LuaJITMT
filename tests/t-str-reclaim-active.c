@@ -25,6 +25,13 @@ static void run_callback(void (*fn)(void))
   fn();
 }
 
+static void with_borrowed_string(const char *bytes, void (*callback)(void))
+{
+  assert(memcmp(bytes, held, sizeof(held)) == 0);
+  callback();
+  assert(memcmp(bytes, held, sizeof(held)) == 0);
+}
+
 static int callback_park(lua_State *L)
 {
   if (lua_gettop(L) == 0) {
@@ -118,16 +125,23 @@ static void run_reclamation(int use_jit, int pool)
     "if use_jit then jit.opt.start('hotloop=8')\n"
     "elseif jit then jit.off() end\n"
     "assert(threading.gcworkers(pool) == 0)\n"
-    "local ready, start = threading.channel(1), threading.channel(1)\n"
+    "local ready, start = threading.channel(1), threading.channel(0)\n"
     "local have_ffi, ffi = pcall(require, 'ffi')\n"
     "if not have_ffi then ffi = nil end\n"
-    "local peer = assert(threading.spawn(function(stop, ready, start, held, park, invoke, ffi, use_jit)\n"
+    "local peer = assert(threading.spawn(function(stop, ready, start, held, park, invoke, ffi, use_jit, send)\n"
+    "  local function wait()\n"
+    "    if send then assert(start:send(held)) else assert(select(2, start:recv(20))) end\n"
+    "  end\n"
     "  assert(ready:send(true, 10))\n"
-    "  assert(select(2, start:recv(20)))\n"
+    "  wait()\n"
     "  assert(ready:send(true, 10))\n"
     "  if ffi then\n"
-    "    local cb = ffi.cast('void (*)(void)', function() park(false) end)\n"
-    "    ffi.cast('void (*)(void (*)(void))', invoke)(cb)\n"
+    "    local cb = ffi.cast('void (*)(void)', function()\n"
+    "      park(false)\n"
+    "      assert(ready:send(true, 10))\n"
+    "      wait()\n"
+    "    end)\n"
+    "    ffi.cast('void (*)(const char *, void (*)(void))', invoke)(held, cb)\n"
     "    cb:free()\n"
     "  end\n"
     "  local sum = 0\n"
@@ -139,7 +153,11 @@ static void run_reclamation(int use_jit, int pool)
     "    end\n"
     "  until stop()\n"
     "  return #held\n"
-    "end, stop, ready, start, held, park, invoke, ffi, use_jit))\n"
+    "end, stop, ready, start, held, park, invoke, ffi, use_jit, pool ~= 0))\n"
+    "local function release()\n"
+    "  if pool ~= 0 then local s, ok = start:recv(10); assert(ok and s == held)\n"
+    "  else assert(start:send(true, 10)) end\n"
+    "end\n"
     "local function churn(round)\n"
     "  for i = 1, 600 do\n"
     "    local s = ('%d:%d:'):format(round, i):rep(20)\n"
@@ -149,16 +167,27 @@ static void run_reclamation(int use_jit, int pool)
     "assert(select(2, ready:recv(10)))\n"
     "local before = stats()\n"
     "churn(0)\n"
-    "collectgarbage('collect')\n"
-    "assert(stats() == before, 'native ACK certified string acquisition')\n"
-    "assert(start:send(true, 10))\n"
+    "probe(0)\n"
+    "local deadline = threading.now() + 5\n"
+    "repeat\n"
+    "  collectgarbage('collect')\n"
+    "  if stats() - before >= 600 and not probe() then break end\n"
+    "  threading.sleep(0.001)\n"
+    "until threading.now() >= deadline\n"
+    "assert(stats() - before >= 600 and not probe(), 'parked channel retained garbage')\n"
+    "release()\n"
     "assert(select(2, ready:recv(10)))\n"
     "if ffi then\n"
     "  park()\n"
     "  churn(12)\n"
+    "  probe(12)\n"
     "  collectgarbage('collect')\n"
-    "  assert(stats() == before, 'FFI callback certified string acquisition')\n"
+    "  assert(probe(), 'native callback certified string acquisition')\n"
     "  park(true)\n"
+    "  assert(select(2, ready:recv(10)))\n"
+    "  for i = 1, 4 do collectgarbage('collect') end\n"
+    "  assert(probe(), 'channel wait in an FFI callback certified string acquisition')\n"
+    "  release()\n"
     "end\n"
     "if use_jit then\n"
     "  local running\n"
@@ -212,7 +241,7 @@ static void run_reclamation(int use_jit, int pool)
   lua_pushvalue(L, 1);
   lua_pushcfunction(L, stop_worker);
   lua_pushcfunction(L, callback_park);
-  lua_pushlightuserdata(L, (void *)(uintptr_t)run_callback);
+  lua_pushlightuserdata(L, (void *)(uintptr_t)with_borrowed_string);
   lua_pushboolean(L, use_jit);
   lua_pushcfunction(L, worker_running_trace);
   lua_pushcfunction(L, probe_huge_mapping);
@@ -328,13 +357,6 @@ static int check_step_scope(lua_State *L)
   return 0;
 }
 
-static void step_borrow(const char *bytes, void (*callback)(void))
-{
-  assert(memcmp(bytes, held, sizeof(held)) == 0);
-  callback();
-  assert(memcmp(bytes, held, sizeof(held)) == 0);
-}
-
 static void check_step_reclamation(int workers)
 {
   static const char script[] =
@@ -393,7 +415,7 @@ static void check_step_reclamation(int workers)
   assert(luaL_loadbuffer(L, script, sizeof(script)-1, "=bounded string step") == 0);
   lua_pushvalue(L, 1);
   lua_pushcfunction(L, check_step_scope);
-  lua_pushlightuserdata(L, (void *)(uintptr_t)step_borrow);
+  lua_pushlightuserdata(L, (void *)(uintptr_t)with_borrowed_string);
   lua_pushinteger(L, workers);
   lua_pushcfunction(L, probe_huge_mapping);
   status = lua_pcall(L, 5, 0, 0);

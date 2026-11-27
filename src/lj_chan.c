@@ -102,31 +102,6 @@ static int chan_spin_changed(LJChan *ch, uint32_t f)
   return 0;
 }
 
-static void chan_wait(lua_State *L, LJChan *ch)
-{
-  uint32_t f = la_load32_acq(&ch->futex);
-  TGState *tg = L ? L2TG(L) : NULL;
-  LJNativeFrame frame;
-  uint32_t actions = 0;
-  int had_stopreq = lj_safepoint_had_stopreq(L);
-  if (chan_spin_changed(ch, f)) {
-    lj_safepoint_checkstop_fresh(L, 0, had_stopreq);
-    return;
-  }
-  if (L) {
-    lj_trace_abort_owner_before_park(L);
-    lj_safepoint_channel_park_checkpoint(L, tg);
-    lj_native_enter_l(L, &frame);  /* 09 section 9.5: channel park is native. */
-  } else if (tg)
-    lj_native_enter(tg);
-  (void)la_futex_wait(&ch->futex, f, 1000000);
-  if (L)
-    actions = lj_native_leave_l(L, &frame);
-  else if (tg)
-    lj_tg_in_native_store_rlx(tg, 0);
-  lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
-}
-
 static int64_t chan_now_ns(void)
 {
   return (int64_t)lj_thr_now_ns();
@@ -167,16 +142,21 @@ static int chan_wait_timeout(lua_State *L, LJChan *ch, int64_t ns)
   if (L) {
     lj_trace_abort_owner_before_park(L);
     lj_safepoint_channel_park_checkpoint(L, tg);
-    lj_native_enter_l(L, &frame);  /* 09 section 9.5: timed channel park. */
-  } else if (tg)
-    lj_native_enter(tg);
+    lj_native_enter_l(L, &frame);
+  }
   rc = la_futex_wait(&ch->futex, f, ns);
-  if (L)
+  if (L) {
+    /* Revoke the grant before closing native state or servicing an interrupt. */
+    if (tg) la_store32_rel(&tg->str_vm_channel_park, 0);
     actions = lj_native_leave_l(L, &frame);
-  else if (tg)
-    lj_tg_in_native_store_rlx(tg, 0);
+  }
   lj_safepoint_checkstop_fresh(L, actions, had_stopreq);
   return rc != 0 && errno == ETIMEDOUT;
+}
+
+static void chan_wait(lua_State *L, LJChan *ch)
+{
+  (void)chan_wait_timeout(L, ch, INT64_MAX);
 }
 
 static int chan_full_at(LJChan *ch, uint64_t pos)

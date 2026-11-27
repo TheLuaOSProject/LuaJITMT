@@ -320,7 +320,8 @@ struct TGState {
   void *str_vm_outer_cframe;  /* Frontend startup or managed Lua worker entry. */
   uint64_t str_owner_scan_epoch;  /* Completed owner-local root scan. */
   uint32_t vm_checkpoint_pending;  /* Requests for a rooted dispatch checkpoint. */
-  uint64_t str_vm_root_epoch;  /* True owner dispatch checkpoint. */
+  uint32_t str_vm_channel_park;  /* Owner certified this outer channel wait. */
+  uint64_t str_vm_root_epoch;  /* Root scan at a certified Lua frame. */
   GCstr *str_source_pin;  /* Revalidated shared C API source. */
   StrTabHdr *strtab_active_hdr;
   uint32_t strtab_active_depth;

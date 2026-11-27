@@ -268,8 +268,11 @@ int main(int argc, char **argv)
            base.strings + (uint64_t)round * BATCH);
     if (!explicit_collect && !automatic_completed)
       break;
-    assert(!explicit_collect || settled.phase == LJ_GC2_IDLE);
+    /* full_cycles observed IDLE before the live-value lookups and peer ping.
+    ** Those later operations may already have started another collection. */
     assert(settled.completed >= peak.completed + (explicit_collect ? 2 : 3));
+    if (!explicit_collect && with_peer && round == ROUNDS)
+      assert(settled.reclaimed - base.reclaimed >= BATCH);
     if (explicit_collect && !with_peer && !nworkers) {
       assert(settled.strings == base.strings);
       assert(settled.reclaimed - base.reclaimed == (uint64_t)round * BATCH);
@@ -287,7 +290,9 @@ int main(int argc, char **argv)
   recovered = snapshot(L, "sole_main_recovered", rounds_done, filler_total);
   assert(recovered.strings <= base.strings);
   assert(recovered.reclaimed - base.reclaimed >= (uint64_t)rounds_done * BATCH);
-  assert(recovered.unlinked == recovered.reclaimed);
+  /* A peer can rescue an unlinked canonical string and return it to the
+  ** intern table. Check the actual retirement queues after the final grace. */
+  assert(lj_str_qcount_acq(g) == 0 && lj_str_body_retired_head_acq(g) == NULL);
   assert(lj_str_reclaim_exclusive_acq(g) == 0 &&
          lj_str_sweep_batch_acq(g) == NULL &&
          lj_str_retired_batch_head_acq(g) == NULL);
