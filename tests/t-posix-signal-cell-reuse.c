@@ -39,7 +39,7 @@ int __wrap_pthread_setspecific(pthread_key_t key, const void *value)
 static void sample_handler(int signo)
 {
   (void)signo;
-  la_storeuptr_rel(&sampled, (uintptr_t)lj_thr_get_tg_profile_signal());
+  la_storeuptr_rel(&sampled, (uintptr_t)lj_thr_get_tg_profile_signal(NULL));
 }
 
 static void sample(TGState *expected)

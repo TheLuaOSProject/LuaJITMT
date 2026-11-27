@@ -364,9 +364,9 @@ LJ_FUNC int lj_thr_tg_handoff_current(TGState *expected_tg);
 /* Handler-only exact TG lookup. It never consults compiler TLS/TLV state and
 ** never returns raw compatibility bindings. */
 LJ_FUNC TGState *lj_thr_get_tg_signal(void);
-/* Transitional profiler-only lookup. It additionally accepts a same-thread
-** raw mirror until production lifecycle callers all own exact leases. */
-LJ_FUNC TGState *lj_thr_get_tg_profile_signal(void);
+/* Accept a raw profiler mirror too. When TLS has no TG, unbound_actor can
+** receive the registered physical owner without exposing a heap pointer. */
+LJ_FUNC TGState *lj_thr_get_tg_profile_signal(uint32_t *unbound_actor);
 /* Cold signal activation. The caller must pin the containing image first,
 ** because POSIX provides no way to unregister an atfork callback. */
 LJ_FUNC int lj_thr_tg_signal_activate(void);

@@ -47,6 +47,7 @@
 #define LJ_THR_TG_SIGNAL_RAW_TAG ((uintptr_t)2u)
 #define LJ_THR_TG_SIGNAL_TAG_MASK \
   (LJ_THR_TG_EXACT_TAG|LJ_THR_TG_SIGNAL_RAW_TAG)
+#define LJ_THR_TG_SIGNAL_ACTOR_TAG LJ_THR_TG_SIGNAL_TAG_MASK
 typedef char lj_thr_tg_tag_requires_alignment[
   __alignof__(TGState) >= 4 ? 1 : -1];
 typedef char lj_thr_tg_tag_requires_pointer_width[
@@ -147,7 +148,8 @@ static uint32_t lj_thr_next_actor;
 /* Each node stays in its original bucket. The process incarnation and next
 ** link are immutable after publication. An owner of zero admits another
 ** pthread from that bucket after the previous destructor cleared its mirror.
-** Tag 1 mirrors an exact lease and tag 2 is the same-thread raw profiler tag. */
+** Tags 1 and 2 mirror exact and raw TG pointers. Tag 3 carries only a
+** physical actor id when raw TLS is empty; id zero marks an exact clear. */
 #define LJ_THR_TG_SIGNAL_BUCKETS 256u
 typedef struct LJThrTGSignalCell {
   struct LJThrTGSignalCell *next;
@@ -678,11 +680,17 @@ static void lj_thr_signal_word_set(uintptr_t word)
   la_storeuptr_rel(&cell->tagged_word, word);
 }
 
+static LJ_AINLINE uintptr_t lj_thr_signal_actor_word(uint32_t actor)
+{
+  return ((uintptr_t)actor << 2) | LJ_THR_TG_SIGNAL_ACTOR_TAG;
+}
+
 static void lj_thr_signal_word_clear_if_registered(void)
 {
   LJThrTGSignalCell *cell = lj_thr_signal_cell_specific();
   if (cell)
-    la_storeuptr_rel(&cell->tagged_word, 0);
+    la_storeuptr_rel(&cell->tagged_word,
+                     lj_thr_signal_actor_word(lj_thr_actor_current()));
 }
 
 static LJ_AINLINE uintptr_t lj_thr_signal_word_get(void)
@@ -719,10 +727,14 @@ static LJ_AINLINE uintptr_t lj_thr_signal_word_get(void)
   return 0;
 }
 
-static LJ_AINLINE TGState *lj_thr_signal_word_decode(int accept_raw)
+static LJ_AINLINE TGState *lj_thr_signal_word_decode(int accept_raw,
+                                                     uint32_t *unbound_actor)
 {
   uintptr_t word = lj_thr_signal_word_get();
   uintptr_t tag = word & LJ_THR_TG_SIGNAL_TAG_MASK;
+  if (unbound_actor)
+    *unbound_actor = tag == LJ_THR_TG_SIGNAL_ACTOR_TAG ?
+                     (uint32_t)(word >> 2) : 0;
   if (tag != LJ_THR_TG_EXACT_TAG &&
       !(accept_raw && tag == LJ_THR_TG_SIGNAL_RAW_TAG))
     return NULL;
@@ -733,29 +745,29 @@ static LJ_AINLINE TGState *lj_thr_signal_word_decode(int accept_raw)
 
 TGState *lj_thr_get_tg_signal(void)
 {
-  return lj_thr_signal_word_decode(0);
+  return lj_thr_signal_word_decode(0, NULL);
 }
 
-TGState *lj_thr_get_tg_profile_signal(void)
+TGState *lj_thr_get_tg_profile_signal(uint32_t *unbound_actor)
 {
-  return lj_thr_signal_word_decode(1);
+  return lj_thr_signal_word_decode(1, unbound_actor);
 }
 
 #if defined(LJ_THR_SIGNAL_TEST_HELPERS)
 #if LJ_TARGET_OSX
 LUA_API TGState *luaJIT_thr_tg_signal_test_get(void)
 {
-  return lj_thr_signal_word_decode(0);
+  return lj_thr_signal_word_decode(0, NULL);
 }
 
-LUA_API TGState *luaJIT_thr_tg_profile_signal_test_get(void)
+LUA_API TGState *luaJIT_thr_tg_profile_signal_test_get(uint32_t *unbound_actor)
 {
-  return lj_thr_signal_word_decode(1);
+  return lj_thr_signal_word_decode(1, unbound_actor);
 }
 #else
 LUA_API TGState *luaJIT_thr_tg_signal_test_get(void)
   __attribute__((alias("lj_thr_get_tg_signal")));
-LUA_API TGState *luaJIT_thr_tg_profile_signal_test_get(void)
+LUA_API TGState *luaJIT_thr_tg_profile_signal_test_get(uint32_t *unbound_actor)
   __attribute__((alias("lj_thr_get_tg_profile_signal")));
 #endif
 /* Mach-O nlist entries carry no symbol size. Keep an exported helper boundary
@@ -839,8 +851,9 @@ TGState *lj_thr_get_tg_signal(void)
   return NULL;
 }
 
-TGState *lj_thr_get_tg_profile_signal(void)
+TGState *lj_thr_get_tg_profile_signal(uint32_t *unbound_actor)
 {
+  if (unbound_actor) *unbound_actor = 0;
   return NULL;
 }
 
@@ -1146,25 +1159,31 @@ int lj_thr_tg_signal_prepare_current(TGState *expected_tg)
   LJThrTGSignalCell *cell;
   uintptr_t word = lj_thr_tls_word_get();
   uintptr_t tag = word & LJ_THR_TG_SIGNAL_TAG_MASK;
+  TGState *bound = (TGState *)(word & ~LJ_THR_TG_SIGNAL_TAG_MASK);
+  uint32_t actor = lj_thr_actor_current();
   int saved_errno = errno;
-  /* A profiler started from a thread with no current TG could never route a
-  ** sample safely. Likewise, tags other than the exact TLS lease are corrupt
-  ** here: raw compatibility pointers are naturally aligned and untagged. */
-  if (word == 0 || (tag != 0 && tag != LJ_THR_TG_EXACT_TAG) ||
-      (TGState *)(word & ~LJ_THR_TG_SIGNAL_TAG_MASK) != expected_tg ||
-      lj_thr_actor_current() == 0 ||
-      lj_tg_actor_acq(expected_tg) != lj_thr_actor_current()) {
+  if (!expected_tg || !actor || lj_tg_actor_acq(expected_tg) != actor ||
+      (tag != 0 && (tag != LJ_THR_TG_EXACT_TAG || !bound)) ||
+      (bound && lj_tg_actor_acq(bound) != actor) ||
+      (bound != expected_tg &&
+       (!expected_tg->gl || expected_tg->gl->main_tg != expected_tg ||
+        (bound && bound->gl == expected_tg->gl)))) {
     errno = saved_errno;
     return 0;
   }
   cell = lj_thr_signal_cell_prepare();
-  if (!cell) {
+  if (!cell || (!word && la_loaduptr_acq(&cell->tagged_word) ==
+                         LJ_THR_TG_SIGNAL_ACTOR_TAG)) {
     errno = saved_errno;
     return 0;
   }
-  la_storeuptr_rel(&cell->tagged_word,
-                   tag == LJ_THR_TG_EXACT_TAG ? word :
-                   word | LJ_THR_TG_SIGNAL_RAW_TAG);
+  /* Persist no pointer to an independent main state. Its lifetime is
+  ** protected by the active profiler only while a counted handler runs. */
+  if (!bound)
+    word = lj_thr_signal_actor_word(actor);
+  else if (!tag)
+    word |= LJ_THR_TG_SIGNAL_RAW_TAG;
+  la_storeuptr_rel(&cell->tagged_word, word);
   errno = saved_errno;
   return 1;
 }
@@ -1513,7 +1532,7 @@ LJThrTGResult lj_thr_tg_clear(const LJTGRegistryKey *expected_old,
     return LJ_THR_TG_EXPECT_MISMATCH;
   /* A handler must stop seeing the body before TLS relinquishes ownership and
   ** before the caller can receive and release the reconstructed lease. */
-  lj_thr_signal_word_set(0);
+  lj_thr_signal_word_set(LJ_THR_TG_SIGNAL_ACTOR_TAG);
   lj_thr_tls_word_set(0);
   /* The lease count remains owned by this operation until materialized. */
   lj_thr_tg_move_out(old_hold, &current);

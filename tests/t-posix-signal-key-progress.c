@@ -67,7 +67,7 @@ static void *bind_thread(void *arg)
   errno = ERANGE;
   lj_thr_set_tg(&tg);
   assert(errno == ERANGE && lj_thr_get_tg() == &tg);
-  assert(lj_thr_get_tg_profile_signal() == &tg);
+  assert(lj_thr_get_tg_profile_signal(NULL) == &tg);
   if (role == PEER)
     la_store32_rel(&resume, 1);
   role = NONE;

@@ -331,6 +331,10 @@ return function(add)
         t:build({ clean = true, quiet = true, xcflags = flags })
         run_signal_safety_fixture(t, flags)
         if jit and jit.os == "Linux" and t.target_arch == "x64" then
+          build.compile_and_run_c(t, t:tmp("lj_t-profile-independent-states"),
+            "t-profile-independent-states.c", {
+              cflags = flags, timeout = "20s"
+            })
           build.compile_and_run_c(t, t:tmp("lj_t-posix-signal-cell-reuse"),
             "t-posix-signal-cell-reuse.c", {
               cflags = flags,

@@ -289,6 +289,7 @@ static void test_signal_cache(void)
   LJTGSlotSnap snap;
   ExitBindingCtx exit_ctx;
   LJThr exit_thr = {0};
+  uint32_t unbound_actor;
   pid_t child;
   int status;
 
@@ -453,6 +454,7 @@ static void test_signal_cache(void)
   sample_signal(b);
   assert(lj_thr_tg_clear(&bkey, &old) == LJ_THR_TG_OK);
   sample_signal(NULL);
+  assert(!lj_thr_get_tg_profile_signal(&unbound_actor) && unbound_actor == 0);
   release_borrow(&old);
   retire_reclaim(&bkey, b);
 
@@ -461,9 +463,11 @@ static void test_signal_cache(void)
   ** samples until all production bindings carry exact leases. */
   lj_thr_set_tg(a);
   assert(lj_thr_get_tg() == a);
-  assert(lj_thr_get_tg_profile_signal() == a);
+  assert(lj_thr_get_tg_profile_signal(&unbound_actor) == a && unbound_actor == 0);
   sample_signal(NULL);
   lj_thr_set_tg(NULL);
+  assert(!lj_thr_get_tg_profile_signal(&unbound_actor));
+  assert(unbound_actor != 0 && unbound_actor == lj_thr_actor_current());
 
   /* A clean pthread exit clears the mirror before the exact lease can ever be
   ** recovered. This fixture reconstructs the deliberately leaked fungible

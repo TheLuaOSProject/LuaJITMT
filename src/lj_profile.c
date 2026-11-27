@@ -1067,6 +1067,7 @@ PROFILE_SIGNAL_SCOPE void profile_signal(int sig)
 #if LJ_THR_TG_SIGNAL_CACHE
   TGState *tg;
   global_State *g;
+  uint32_t actor;
   int32_t st;
 #endif
   int *errno_address = &errno;
@@ -1076,8 +1077,8 @@ PROFILE_SIGNAL_SCOPE void profile_signal(int sig)
   /* The exact/transitional lookup performs the mandatory eager getpid
   ** incarnation check. No compiler TLS/TLV state is reachable; tag 2 remains
   ** a documented same-thread bridge until production exact migration. */
-  tg = lj_thr_get_tg_profile_signal();
-  if (!tg || !profile_signal_enter(ps))
+  tg = lj_thr_get_tg_profile_signal(&actor);
+  if ((!tg && !actor) || !profile_signal_enter(ps))
     goto signal_out;
 #if defined(LJ_PROFILE_TIMER_TEST_HELPERS)
   if (la_load32_acq(&profile_test_signal_pause)) {
@@ -1091,11 +1092,25 @@ PROFILE_SIGNAL_SCOPE void profile_signal(int sig)
   ** edge; the owner VM's poll/request acquire check enters normal context,
   ** exchanges the request, and only there installs a dispatch overlay. */
   g = profile_g_load_acq(ps);
-  if (g && profile_state_active_g(ps, g) && profile_tg_eligible(g, tg)) {
-    lj_tg_profile_samples_add(tg, 1);
-    st = profile_sample_vmstate_tg(g, tg);
-    lj_tg_profile_vmstate_store_rel(tg, st);
-    lj_tg_profile_request_rel(tg, 1);
+  if (g && profile_state_active_g(ps, g)) {
+    if (!tg || tg->gl != g) {
+      lua_State *cur;
+      /* Independent main states can share a pthread. Stop drains this handler
+      ** before freeing g. Its main TG's current coroutine is a GC root, and
+      ** only its interrupted owner can be executing that coroutine here. */
+      if (tg) actor = lj_tg_actor_acq(tg);
+      tg = g->main_tg;
+      if (!actor || lj_tg_actor_acq(tg) != actor ||
+          !(cur = lj_tg_load_cur_L(tg)) || !lj_tg_owns_state_acq(tg, cur) ||
+          !la_loadptr_acq((void *const *)&cur->cframe))
+        tg = NULL;
+    }
+    if (profile_tg_eligible(g, tg)) {
+      lj_tg_profile_samples_add(tg, 1);
+      st = profile_sample_vmstate_tg(g, tg);
+      lj_tg_profile_vmstate_store_rel(tg, st);
+      lj_tg_profile_request_rel(tg, 1);
+    }
   }
   (void)la_sub32_acqrel(&ps->signal_handlers, 1);
 #else
@@ -1153,7 +1168,7 @@ static int profile_timer_start(ProfileState *ps, TGState *expected_tg)
   }
   /* Resolve handler-reachable errno/getter entries in normal context. */
   (void)errno;
-  (void)lj_thr_get_tg_profile_signal();
+  (void)lj_thr_get_tg_profile_signal(NULL);
   errno = saved_errno;
   tm.it_value.tv_sec = tm.it_interval.tv_sec = interval / 1000;
   tm.it_value.tv_usec = tm.it_interval.tv_usec = (interval % 1000) * 1000;
