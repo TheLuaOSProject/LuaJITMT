@@ -3,6 +3,7 @@
 #include <sched.h>
 #include <stdatomic.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,6 +19,7 @@ typedef union Block {
 
 typedef struct Counting {
   atomic_size_t attempts, live, frees;
+  atomic_uintptr_t latest_block;
   atomic_int pause;
   size_t fail_at;
 } Counting;
@@ -66,6 +68,7 @@ static void *counting_alloc(void *ud, void *p, size_t osize, size_t nsize)
   count->live -= osize;
   if (nsize > osize)
     memset((char *)(block + 1) + osize, 0xa7, nsize - osize);
+  count->latest_block = (uintptr_t)(block + 1);
   return block + 1;
 }
 
@@ -107,6 +110,19 @@ static void check_allocf(lua_State *L, lua_Alloc expected, void *expected_ud)
   assert(lua_getallocf(L, NULL) == expected);
 }
 
+static void check_userdata_backing(lua_State *L, Counting *count, size_t size)
+{
+  const unsigned char *data = lua_touserdata(L, -1);
+  uintptr_t address = (uintptr_t)data;
+  uintptr_t raw = count->latest_block;
+  const Block *block;
+  assert(raw && address >= raw);
+  block = (const Block *)raw - 1;
+  assert(size <= block->size);
+  assert(address - raw <= block->size - size);
+  assert(data[0] == 'a' && data[size - 1] == 'a');
+}
+
 static void test_bootstrap_failure(void)
 {
   Counting initial = {0};
@@ -134,6 +150,7 @@ static void test_custom_allocator(void)
   assert(L);
   lua_gc(L, LUA_GCSTOP, 0);
   assert(protected_userdata(L, 200000) == LUA_OK);
+  check_userdata_backing(L, &count, 200000);
   co = lua_newthread(L);
   check_allocf(co, counting_alloc, &count);
   {
@@ -145,6 +162,7 @@ static void test_custom_allocator(void)
     assert(wrapper.frees > 0);
     assert(protected_userdata(L, 250000) == LUA_OK);
     assert(wrapper.allocations > 0);
+    check_userdata_backing(L, &count, 250000);
     lua_setallocf(L, counting_alloc, &count);
     check_allocf(L, counting_alloc, &count);
   }  /* Wrapper context expires while its huge allocation is still live. */
@@ -160,7 +178,13 @@ static void test_custom_allocator(void)
   lua_pop(L, 1);
   count.fail_at = 0;
   assert(protected_userdata(L, 400000) == LUA_OK);
-  lua_close(L);
+  check_userdata_backing(L, &count, 400000);
+  {
+    Wrapper wrapper = { counting_alloc, &count, 0, 0 };
+    lua_setallocf(L, wrapping_alloc, &wrapper);
+    lua_close(L);
+    assert(wrapper.frees > 1);
+  }
   assert(count.live == 0);
 }
 
@@ -180,7 +204,11 @@ static void test_wrapping_builtin(void)
     check_allocf(L, wrapping_alloc, &wrapper);
     lua_pop(L, 1);
     collect(L);
+#ifdef LUAJIT_USE_SYSMALLOC
+    assert(wrapper.frees > 0);
+#else
     assert(wrapper.frees == 0);  /* The old mapping is native. */
+#endif
     assert(protected_userdata(L, 180000) == LUA_OK);
     assert(wrapper.allocations > 0);
     lua_pop(L, 1);

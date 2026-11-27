@@ -360,13 +360,19 @@ return function(add)
 
   register({
     name = "m3_gc2_internal_allocator_only",
-    description = "temporary internal-arena-only lua_Alloc safety boundary",
+    description = "platform allocator policy in default and sysmalloc builds",
     run = function(t)
       local sysmalloc = "-DLUAJIT_USE_SYSMALLOC -DLUA_USE_APICHECK"
+      local source = "t-gc2-internal-allocator-only.c"
+      local pthread
+      if jit.os == "Linux" and jit.arch == "x64" then
+        source = "t-allocator-embedding.c"
+        pthread = os.getenv("PTHREAD") or "-pthread"
+      end
       make_clean(t)
       make_default(t, { jobs = false })
-      compile_and_run_c(t, t:tmp("lj_t-gc2-internal-allocator-only"),
-                        "t-gc2-internal-allocator-only.c", {
+      compile_and_run_c(t, t:tmp("lj_t-gc2-allocator-policy"), source, {
+        cflags = pthread,
         timeout = "60s"
       })
       build.with_default_build_restore(t, function()
@@ -376,9 +382,9 @@ return function(add)
           args = { "XCFLAGS=" .. sysmalloc }
         })
         compile_and_run_c(t,
-                          t:tmp("lj_t-gc2-internal-allocator-only-sysmalloc"),
-                          "t-gc2-internal-allocator-only.c", {
-          cflags = sysmalloc,
+                          t:tmp("lj_t-gc2-allocator-policy-sysmalloc"),
+                          source, {
+          cflags = pthread and sysmalloc .. " " .. pthread or sysmalloc,
           timeout = "60s"
         })
       end, { jobs = false })

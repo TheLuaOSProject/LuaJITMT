@@ -2161,15 +2161,15 @@ static GCArena *arena_backing_map(PRNGState *rs, size_t keep, size_t extra,
     uintptr_t aligned;
     LJArenaHostSpan *span;
     size_t size;
-    if (!arena_addr_ok(LJ_ARENA_MMAP_LOWER, keep) ||
-	keep > SIZE_MAX - extra - padding)
+    if (keep > SIZE_MAX - extra - padding ||
+	!arena_addr_ok(LJ_ARENA_MMAP_LOWER, keep + extra))
       return NULL;
     size = keep + extra + padding;
     raw = f(ud, NULL, 0, size);
     if (!raw)
       return NULL;
     aligned = ((uintptr_t)raw + padding) & ~(uintptr_t)LJ_ARENA_MASK;
-    if (aligned < (uintptr_t)raw || !arena_addr_ok(aligned, keep)) {
+    if (aligned < (uintptr_t)raw || !arena_addr_ok(aligned, keep + extra)) {
       arena_host_free(host, raw, size);
       return NULL;
     }
