@@ -11029,7 +11029,8 @@ void lj_trace_freestate(global_State *g)
 #endif
   lj_mem_freevec(g, J->snapmapbuf, J->sizesnapmap, SnapEntry);
   lj_mem_freevec(g, J->snapbuf, J->sizesnap, SnapShot);
-  lj_mem_freevec(g, J->irbuf + J->irbotlim, J->irtoplim - J->irbotlim, IRIns);
+  if (J->irbuf)
+    lj_mem_freevec(g, J->irbuf + J->irbotlim, J->irtoplim - J->irbotlim, IRIns);
   {
     TraceVec *tv = tracevec_acq(J);
     if (tv) {

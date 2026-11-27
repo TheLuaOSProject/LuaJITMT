@@ -76,10 +76,11 @@ IRCALLDEF(IRCALLCI)
 /* Grow IR buffer at the top. */
 void LJ_FASTCALL lj_ir_growtop(jit_State *J)
 {
-  IRIns *baseir = J->irbuf + J->irbotlim;
+  IRIns *baseir;
   MSize szins = J->irtoplim - J->irbotlim;
   if (szins) {
-    baseir = (IRIns *)lj_mem_realloc(J->L, baseir, szins*sizeof(IRIns),
+    IRIns *oldbase = J->irbuf + J->irbotlim;
+    baseir = (IRIns *)lj_mem_realloc(J->L, oldbase, szins*sizeof(IRIns),
 				     2*szins*sizeof(IRIns));
     J->irtoplim = J->irbotlim + 2*szins;
   } else {
