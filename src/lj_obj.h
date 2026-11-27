@@ -2054,6 +2054,7 @@ typedef struct GC2State {
 	  uint32_t mark_root_scanned;  /* MARK close owner/global snapshot state. */
 	  uint32_t jit_mark_resume;  /* Cycle authorized for cooperative MARK entry. */
 	  uint32_t jit_mark_auto_yield;  /* Bounded pre-dispatch attempts per cycle. */
+	  uint32_t jit_sweep_rescue_full;  /* A native turn left a full rescue batch. */
 	  uint64_t jit_mark_yield_until_ns;  /* Bounded MARK mutator lease. */
 	  uint32_t jit_sweep_displaced;  /* Closed gate displaced native execution. */
 	  uint32_t jit_sweep_entered;  /* Admitted trace consumed this open turn. */

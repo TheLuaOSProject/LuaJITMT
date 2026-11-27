@@ -157,6 +157,7 @@ static void gc2_jit_phase_gate_open_sweep(global_State *g, int mutator_turn)
   if (!g || la_load32_acq(&g->gc2.explicit_collectors) != 0 ||
       gc2_phase_acq(g) != LJ_GC2_SWEEP ||
       gc2_fixpoint_epoch_actions_acq(g) != 0 ||
+      la_load32_acq(&g->gc2.jit_sweep_rescue_full) ||
       !gc2_sweep_bridge_ready_acq(g))
     return;
   lj_assertG(gc2_phase_acq(g) == LJ_GC2_SWEEP &&
@@ -1804,6 +1805,7 @@ int lj_gc2_init(global_State *g)
   gc2_jit_phase_gate_store_rlx(g, 1);
   gc2_jit_mark_resume_store_rlx(g, 0);
   gc2_jit_mark_auto_yield_store_rlx(g, 0);
+  la_store32_rlx(&g->gc2.jit_sweep_rescue_full, 0);
   gc2_jit_mark_yield_until_ns_store_rlx(g, 0);
   gc2_jit_sweep_displaced_store_rlx(g, 0);
   la_store32_rlx(&g->gc2.jit_sweep_entered, 0);
@@ -4911,6 +4913,8 @@ static void gc2_weak_to_sweep(global_State *g, lua_State *L, int automatic)
   }
   gc2_sweep_bridge_ready_rel(g, 0);
   gc2_sweep_root_scanned_rel(g, 0);
+  la_store32_rlx(&g->gc2.jit_sweep_rescue_full, 0);
+  la_store32_rlx(&g->gc2.jit_sweep_entered, 0);
   gc2_sweep_root_cursor_rel(g, lj_gc_root_ref(g));
   gc2_sweep_root_done_rel(g, 0);
   gc2_sweep_grace_needed_rel(g, 0);
@@ -22819,8 +22823,16 @@ drain_graph:
     return n;  /* Never cross a retry quantum into irreversible sweep work. */
   /* Keep the unused budget if the graph frontier is empty. VM work between
   ** small public steps may keep adding a few rescue entries per invocation. */
-  if (n >= limit)
+  if (n >= limit) {
+    /* Native re-entry can replenish rescue work after every bounded drain.
+    ** Once a real trace turn leaves a full batch, let this SWEEP finish
+    ** without lending another turn. The closed entry gate lets peers keep
+    ** executing in the VM and preserves all reclaim and reader checks. */
+    if (gc2_sweep_bridge_ready_acq(g) &&
+	la_load32_acq(&g->gc2.jit_sweep_entered))
+      la_store32_rel(&g->gc2.jit_sweep_rescue_full, 1);
     return n;
+  }
   /* A peer can publish a below-capacity active SSB suffix after the SWEEP
   ** bridge snapshot. The current logical owner was rotated before taking the
   ** worker token, but another native/VM TG can leave semantic rescue work in
