@@ -16,6 +16,7 @@ local M2_ORDER = {
   "m2_arena_plain_late",
   "m2_arena_plain_progress",
   "m2_arena_plain_shrink",
+  "m2_arena_worker_storage",
   "m2_arena_hugetab",
   "m2_arena_huge_tail",
   "m2_arena_sweep",
@@ -116,6 +117,20 @@ return function(add)
       if jit.os ~= "Linux" or jit.arch ~= "x64" then return end
       build_and_run_c(t, t:tmp("lj_t_allocator_embedding"),
                       "t-allocator-embedding.c", { timeout = "30s" })
+    end
+  })
+
+  register({
+    name = "m2_arena_worker_storage",
+    description = "cross-thread growth and detached worker storage while a peer remains live",
+    run = function(t)
+      if jit.os ~= "Linux" or jit.arch ~= "x64" then return end
+      build.build_default(t)
+      build.run_c_fixtures(t, { "t-arena-foreign-grow" }, { timeout = "30s" })
+      local out = t:tmp("lj_t_arena_dead_plain")
+      build.compile_and_run_c(t, out, "t-arena-dead-plain.c",
+                              { env = { POOL = "0" }, timeout = "30s" })
+      t:run({ out }, { env = { POOL = "2" }, timeout = "30s" })
     end
   })
 

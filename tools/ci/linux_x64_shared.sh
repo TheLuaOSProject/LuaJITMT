@@ -31,4 +31,6 @@ for script in t-gc-workers t-threading-join-lifetime t-jit-fnew-inherited \
   echo "$script"
   timeout 180 "$bin" "tests/$script.lua"
 done
+LJ_M5_TAB_RESIZE_STRESS_CASES=jitstore,jitread,jititer \
+  timeout 180 "$bin" tests/t-tab-resize-stress.lua
 timeout 180 "$bin" bench/jit-parity.lua
