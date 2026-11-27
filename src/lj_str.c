@@ -1669,6 +1669,15 @@ void lj_str_gc2_reclaim_cancel(global_State *g)
   scope = lj_str_reclaim_scope_acq(g);
   if ((uint32_t)(scope >> 32) != lj_tg_tid_acq(tg))
     return;
+  /* A full collection may yield on a native reader during ownership-list
+  ** pruning. Before the bridge opens, the sole mutator has only reserved
+  ** string sweep. No directory or body has changed, and its exclusion still
+  ** prevents any pool worker or new TG from entering the heap. */
+  if (lj_str_reclaim_exclusive_acq(g) && !gc2_sweep_bridge_ready_acq(g) &&
+      lj_str_sweep_phase_acq(g) == LJ_STR_SWEEP_ACQUIRE) {
+    lj_str_sweep_phase_rel(g, LJ_STR_SWEEP_DONE);
+    lj_str_reclaim_exclusive_rel(g, 0);
+  }
   /* The sole-mutator batch is drained before this exclusion ends.
   ** Active quarantine records may span multiple explicit collections. */
   lj_assertG(lj_str_reclaim_exclusive_acq(g) == 0,

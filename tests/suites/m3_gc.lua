@@ -876,6 +876,10 @@ return function(add)
           },
           timeout = "30s"
         }))
+        compile_and_run_c(t, t:tmp("lj_t-gc2-huge-reader-sweep"),
+                          "t-gc2-huge-reader-sweep.c", {
+          cflags = flags, timeout = "30s"
+        })
       end, { jobs = false })
     end
   })

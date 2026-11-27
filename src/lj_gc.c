@@ -1927,45 +1927,20 @@ static int gc2_sweep_detached_small(global_State *g, GCArena *a,
   return 1;
 }
 
-static int gc2_sweep_detached_obj(global_State *g, GCobj *o, int marked)
+/* Keep the ownership edge until HugeTab has accepted its exact header.
+** A native reader or a BUSY owner can defer retirement across a full GC. */
+static int gc2_sweep_ticket_huge(global_State *g, GCobj *o,
+                                 const GCRootStateRef *root)
 {
-  void *base = gc2_sweep_obj_base(g, o);
-  GCArena *a = lj_arena_of(base);
-  if (!lj_arena_ishuge(a)) {
-    uint32_t cell = lj_arena_cellof(base);
-    if (cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS)
-      return gc2_sweep_detached_small(g, a, cell, marked);
+  int rc = lj_arena_hugetab_retire(root->ht, root->base, o,
+                                   lj_gc2_retire_epoch(g), NULL);
+  if (rc == 0)
     return 0;
-  }
-  {
-    uint32_t owner_tid = lj_arena_owner_acq(a);
-    TGState *tg = lj_tg_find_owner(g, owner_tid);
-    int ticketed;
-    if (!tg || !lj_tg_flags_test_acq(tg, TGF_HUGETAB))
-      return 0;
-    /* One huge mapping contains one allocation. Publish an explicit metadata
-    ** ticket for both dead and already-marked detached roots: RETIRED is the
-    ** destructor claim, while MARK|TICKET is the post-grace reanchor claim.
-    ** A concurrent marker may win either side of this call without making the
-    ** exact variable-offset header undiscoverable. */
-    {
-      LJHugeInfo hi;
-      ticketed = lj_arena_hugetab_retire(&tg->huge, base, o,
-						lj_gc2_retire_epoch(g), &hi);
-      /* A marker that meets SWEEP_OLD|BUSY cannot read the header or wait for
-      ** the retire owner. It publishes MARK_INTENT instead; return 2 makes this
-      ** unique owner discharge exactly one semantic traversal after TICKET has
-      ** made retire_obj and the mapping readable again. */
-      if (ticketed == 2)
-	(void)lj_gc2_trace_sweep_root(g, o);
-    }
-    lj_assertG(ticketed, "detached huge root lost ownership ticket");
-    if (!ticketed)
-      return 0;  /* Retain the mapped body; never invent a destructor owner. */
-    gc2_sweep_grace_needed_rel(g, 1);
-    UNUSED(marked);
-    return 1;
-  }
+  /* MARK arriving during BUSY leaves traversal to this ticket publisher. */
+  if (rc == 2)
+    (void)lj_gc2_trace_sweep_root(g, o);
+  gc2_sweep_grace_needed_rel(g, 1);
+  return 1;
 }
 
 uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
@@ -2059,11 +2034,10 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
       GCRootStateRef rootstate;
       int exclusive_leaf;
       int rootclaim = gc_root_unlink_claim_queued(g, o, &info, &rootstate);
-      if (rootclaim != LJ_GC_ROOT_UNLINKED) {
-	/* NONE is an unconverted direct-VM publication; LINKING/UNLINKING is an
-	** in-flight C publisher/remover. Neither is proof that this incoming edge
-	** belongs to us. Retain the allocation and its graph for this generation
-	** without changing gcw. */
+      if (rootclaim != LJ_GC_ROOT_UNLINKED ||
+	  rootstate.kind == GC_ROOT_STATE_EXEMPT) {
+	/* Only an exact allocator membership claim permits this splice.
+	** Preserve exempt, unconverted and in-flight roots for this cycle. */
 	(void)lj_gc2_markmem(g, info.base);
 	p = lj_obj_gcwref(o);
 	continue;
@@ -2076,11 +2050,21 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
 	break;
       }
 #endif
+      if (rootstate.kind == GC_ROOT_STATE_HUGE &&
+          !gc2_sweep_ticket_huge(g, o, &rootstate)) {
+        gc_root_unlink_restore(&rootstate);
+        /* Preserve this exact cursor for the next collector turn. A full
+        ** request must return to a caller that holds the mapping reader. */
+        (void)gc2_deferred_epoch_add(g, 1);
+        break;
+      }
       exclusive_leaf = mt_exclusive ?
 	gc2_sweep_exclusive_leaf_claim(g, o, &info) : 0;
       if (!gc_chain_splice(p, o)) {
 	/* Do not monopolize UNLINKING against predecessor churn. A later bounded
-	** root pass can acquire a fresh claim and retry the exact edge. */
+	** root pass can acquire a fresh claim and retry the exact edge.
+	** A published huge ticket remains pinned by MEMBER and is idempotent
+	** on retry. The huge sweep also reconciles already-linked tickets. */
 	if (exclusive_leaf) {
 	  int restored = lj_arena_lifetime_state_cas(
 	    (GCArena *)info.arena, info.start,
@@ -2096,12 +2080,9 @@ uint32_t lj_gc_sweep_gc2_unmarked(global_State *g)
 	unlinked++;
 	continue;
       }
-      if (LJ_UNLIKELY(!gc2_sweep_detached_obj(g, o, marked > 0))) {
-	/* The object is no longer reachable from the spine, so restoring MEMBER
-	** would lie. Keep UNLINKING as a fail-closed arena-reuse veto. */
-	lj_assertG(0, "detached root lost sweep classification");
-	break;
-      }
+      if (rootstate.kind == GC_ROOT_STATE_SMALL)
+        (void)gc2_sweep_detached_small(g, rootstate.a, rootstate.cell,
+                                       marked > 0);
       {
 	int committed = gc_root_unlink_commit(g, &rootstate);
 	lj_assertG(committed, "sweep root membership commit lost");
