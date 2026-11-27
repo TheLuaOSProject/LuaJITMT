@@ -29,7 +29,11 @@
 #include <time.h>
 #include <unistd.h>
 #if LJ_TARGET_LINUX
+#include <fcntl.h>
+#include <linux/magic.h>
+#include <stdio.h>
 #include <sys/mman.h>
+#include <sys/vfs.h>
 #include <sys/syscall.h>
 #ifndef MADV_WIPEONFORK
 #define MADV_WIPEONFORK 18
@@ -961,6 +965,64 @@ static LJThrActorRecord *lj_thr_actor_record_new(uint32_t actor)
   return record;
 }
 
+#if LJ_TARGET_LINUX
+/* Linux wakes CLONE_CHILD_CLEARTID joiners before removing the native TID.
+** PF_EXITING is set in do_exit() before that wake, after the last opportunity
+** to execute a userspace destructor. Only consult procfs in this interval. */
+static int thr_proc_read(int dir, const char *name, char *buf, size_t size)
+{
+  int fd = openat(dir, name, O_RDONLY | O_CLOEXEC);
+  ssize_t n;
+  if (fd < 0) return 0;
+  do { n = read(fd, buf, size-1); } while (n < 0 && errno == EINTR);
+  close(fd);
+  if (n <= 0) return 0;
+  buf[n] = '\0';
+  return 1;
+}
+
+static int thr_linux_task_exiting(uint32_t tid)
+{
+  char path[64], buf[4096], *field, *end;
+  struct statfs fs;
+  unsigned long flags;
+  int dir, i, exiting = 0;
+  snprintf(path, sizeof(path), "/proc/self/task/%u", tid);
+  dir = open(path, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
+  if (dir < 0) return 0;
+  if (fstatfs(dir, &fs) || fs.f_type != PROC_SUPER_MAGIC ||
+      !thr_proc_read(dir, "status", buf, sizeof(buf)))
+    goto done;
+  /* A procfs mounted from an outer PID namespace can present a different
+  ** thread under this number. The last NSpid names the thread in its own
+  ** namespace. Both reads use the same retained task directory. */
+  field = strstr(buf, "\nNSpid:");
+  if (!field || !(end = strchr(field+7, '\n'))) goto done;
+  *end = '\0';
+  field = strrchr(field, '\t');
+  if (!field || strtoul(field+1, &field, 10) != tid || field != end)
+    goto done;
+  if (!thr_proc_read(dir, "stat", buf, sizeof(buf))) goto done;
+  /* The comm field can contain spaces, newlines and closing parentheses.
+  ** Skip the state plus the five fields through tpgid to reach the flags. */
+  field = strrchr(buf, ')');
+  for (i = 0; field && i < 7; i++)
+    field = strchr(field+1, ' ');
+  if (!field || field[1] < '0' || field[1] > '9') goto done;
+  flags = strtoul(field+1, &end, 10);
+  exiting = *end == ' ' && (flags & 0x00000004u);  /* Linux PF_EXITING. */
+done:
+  close(dir);
+  return exiting;
+}
+
+static int thr_linux_tid_gone(const LJThrActorRecord *record)
+{
+  return syscall(SYS_tgkill, (pid_t)record->process_id,
+                 (pid_t)record->native_tid, 0) == -1 && errno == ESRCH;
+}
+#endif
+
 static int lj_thr_actor_is_dead(uint32_t actor)
 {
   LJThrActorRecord *record = (LJThrActorRecord *)
@@ -975,13 +1037,10 @@ static int lj_thr_actor_is_dead(uint32_t actor)
       {
         int saved_errno = errno;
         int dead = 0;
-        /* PID mismatch rejects fork copies. tgkill signal zero is a kernel
-        ** lifetime query: ESRCH is observed only after userspace TLS teardown
-        ** and task exit. TID reuse returns live and therefore fails closed. */
-        if (record->process_id == (uint32_t)getpid() &&
-            syscall(SYS_tgkill, (pid_t)record->process_id,
-                    (pid_t)record->native_tid, 0) == -1 && errno == ESRCH)
-          dead = 1;
+        if (record->process_id == (uint32_t)getpid())
+          dead = thr_linux_tid_gone(record) ||
+            thr_linux_task_exiting(record->native_tid) ||
+            thr_linux_tid_gone(record);  /* Task disappeared during procfs read. */
         errno = saved_errno;
         return dead;
       }

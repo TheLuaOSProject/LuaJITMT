@@ -15,6 +15,11 @@
 #include "lj_thr.h"
 #include "lj_tg.h"
 
+#if LJ_TARGET_LINUX
+#include <sched.h>
+#include <sys/prctl.h>
+#endif
+
 typedef struct CloseCtx {
   lua_State *L;
   pthread_t owner;
@@ -22,6 +27,11 @@ typedef struct CloseCtx {
   int saw_null_before;
   int saw_null_after;
   int closed;
+#if LJ_TARGET_LINUX
+  int late;
+  unsigned int dtor_round;
+  uint32_t in_destructor, may_return;
+#endif
 } CloseCtx;
 
 static CloseCtx *close_ctx;
@@ -92,6 +102,27 @@ static void install_close_finalizer(lua_State *L)
   lua_setglobal(L, "m8_moved_close_finalizer_owner");
 }
 
+#if LJ_TARGET_LINUX
+static pthread_key_t late_key;
+
+static void late_destructor(void *arg)
+{
+  CloseCtx *ctx = (CloseCtx *)arg;
+  if (ctx->dtor_round++ == 0) {
+    /* Run again after every key's first destructor, including the VM's. */
+    assert(pthread_setspecific(late_key, ctx) == 0);
+    return;
+  }
+  la_store32_rel(&ctx->in_destructor, 1);
+  while (!la_load32_acq(&ctx->may_return)) sched_yield();
+  lua_getglobal(ctx->L, "m8_moved_close_sink");
+  lua_getfield(ctx->L, -1, "hash");
+  lua_getfield(ctx->L, -1, "marker");
+  assert(strcmp(lua_tostring(ctx->L, -1), "hash-before-close") == 0);
+  lua_pop(ctx->L, 3);
+}
+#endif
+
 static void *create_on_departing_thread(void *arg)
 {
   CloseCtx *ctx = (CloseCtx *)arg;
@@ -112,6 +143,12 @@ static void *create_on_departing_thread(void *arg)
   assert(ctx->creator_actor != 0);
   assert(lj_tg_actor_acq(G(L)->main_tg) == ctx->creator_actor);
   ctx->L = L;
+#if LJ_TARGET_LINUX
+  /* Linux stat includes closing parentheses and newlines from the task name. */
+  assert(prctl(PR_SET_NAME, "Lua) R 1)\n 4 (") == 0);
+  if (ctx->late)
+    assert(pthread_setspecific(late_key, ctx) == 0);
+#endif
 
 #if !LJ_TARGET_LINUX
   /* macOS and Windows deliberately fail closed for an exited actor until their
@@ -142,13 +179,28 @@ static void *close_on_unbound_thread(void *arg)
   return NULL;
 }
 
-int main(void)
+static void check_close(int late, int joiner_closes)
 {
   CloseCtx ctx;
   pthread_t creator, closer;
 
   memset(&ctx, 0, sizeof(ctx));
+  finalizer_calls = finalizer_write_checks = 0;
+  close_ctx = NULL;
+#if LJ_TARGET_LINUX
+  ctx.late = late;
+#else
+  (void)late;
+#endif
   assert(pthread_create(&creator, NULL, create_on_departing_thread, &ctx) == 0);
+#if LJ_TARGET_LINUX
+  if (late) {
+    while (!la_load32_acq(&ctx.in_destructor)) sched_yield();
+    lua_close(ctx.L);  /* The creator can still execute Lua API calls. */
+    assert(finalizer_calls == 0);
+    la_store32_rel(&ctx.may_return, 1);
+  }
+#endif
   assert(pthread_join(creator, NULL) == 0);
   assert(ctx.L != NULL && ctx.creator_actor != 0);
 
@@ -163,12 +215,26 @@ int main(void)
 #endif
   assert(lj_thr_get_tg() == NULL);
 
-  assert(pthread_create(&closer, NULL, close_on_unbound_thread, &ctx) == 0);
-  assert(pthread_join(closer, NULL) == 0);
+  if (joiner_closes) {
+    close_on_unbound_thread(&ctx);
+  } else {
+    assert(pthread_create(&closer, NULL, close_on_unbound_thread, &ctx) == 0);
+    assert(pthread_join(closer, NULL) == 0);
+  }
   assert(ctx.saw_null_before && ctx.saw_null_after && ctx.closed);
   assert(finalizer_calls == 1);
   assert(finalizer_write_checks == 2);
+  close_ctx = NULL;
+}
 
+int main(void)
+{
+  check_close(0, 0);
+#if LJ_TARGET_LINUX
+  assert(pthread_key_create(&late_key, late_destructor) == 0);
+  check_close(1, 1);
+  assert(pthread_key_delete(late_key) == 0);
+#endif
   printf("t-m8-close-moved-state OK: moved close preserved GC-valued "
 #if LJ_TARGET_LINUX
 	 "finalizer table stores with creator-exit death proof\n");
