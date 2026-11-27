@@ -465,6 +465,7 @@ struct TGAlloc {
   void *owner_tg;
   uint8_t alloc_black;
   uint8_t free_noinsert;
+  uint8_t plain_empty_hint;  /* Owner saw the last allocated block disappear. */
   /* Diagnostic scalar publications by the existing list owner. Remote stats
   ** readers never follow owned[]/needsweep[] or acquire allocator ownership.
   ** Each count describes the last published list transition; the fields do

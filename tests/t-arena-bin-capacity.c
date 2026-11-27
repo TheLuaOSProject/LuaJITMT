@@ -166,6 +166,84 @@ static void *publish_blocks(void *ud)
   }
   return NULL;
 }
+enum FragmentCase { FRAGMENT_LOCAL, FRAGMENT_REMOTE, FRAGMENT_READER,
+                    FRAGMENT_RESERVED };
+
+static int test_fragmented_plain(enum FragmentCase mode)
+{
+  TGAlloc alloc;
+  PRNGState rs;
+  GCArena *target = NULL, *guard_arena, *used;
+  uint32_t start = 0, i, block_cells = lj_arena_ncells(BLOCK_BYTES);
+  uint32_t slots = (LJ_ARENA_CELLS - LJ_AFIRST_CELL) / block_cells;
+  uint32_t targets = slots - (mode == FRAGMENT_RESERVED);
+  uint32_t large = 4u * BLOCK_BYTES;
+  unsigned char **blocks = calloc(targets + slots, sizeof(*blocks));
+  unsigned char *value;
+  assert(blocks);
+  lj_prng_seed_fixed(&rs);
+  lj_arena_alloc_init(&alloc);
+  if (mode == FRAGMENT_RESERVED) {
+    assert(lj_arena_reserve_bump(&alloc, &rs, 0, block_cells, &target, &start));
+    memset(lj_arena_cellptr(target, start), 0xcd, BLOCK_BYTES);
+  }
+  for (i = 0; i < targets + slots; i++) {
+    blocks[i] = lj_arena_alloc(&alloc, &rs, BLOCK_BYTES, 0);
+    assert(blocks[i]);
+    memset(blocks[i], pattern(i), BLOCK_BYTES);
+  }
+  if (target) assert(target == lj_arena_of(blocks[0]));
+  target = lj_arena_of(blocks[0]);
+  guard_arena = lj_arena_of(blocks[targets]);
+  assert(target != guard_arena);
+  assert(lj_arena_alloc_owned_count_acq(&alloc, LJ_ARENAK_PLAIN) == 2);
+  for (i = 0; i < targets; i++) {
+    assert(lj_arena_of(blocks[i]) == target);
+    if (mode == FRAGMENT_REMOTE)
+      assert(lj_arena_remote_free_publish(&alloc, blocks[i], BLOCK_BYTES));
+    else
+      lj_arena_free(&alloc, blocks[i], BLOCK_BYTES);
+  }
+  if (mode == FRAGMENT_REMOTE)
+    assert(lj_arena_remote_free_drain(&alloc) == targets);
+  if (mode == FRAGMENT_READER)
+    assert(lj_arena_rescue_enter(target) == LJ_ARENA_RESCUE_FULL);
+  value = lj_arena_alloc(&alloc, &rs, large, 0);
+  assert(value);
+  used = lj_arena_of(value);
+  memset(value, 0xab, large);
+  if (mode == FRAGMENT_READER || mode == FRAGMENT_RESERVED) {
+    assert(used != target && used != guard_arena);
+    if (mode == FRAGMENT_READER)
+      lj_arena_rescue_leave(target);
+    else {
+      check_bytes(lj_arena_cellptr(target, start), BLOCK_BYTES, 0xcd);
+      lj_arena_block_set(target, start);  /* Finish the earlier reservation. */
+      lj_arena_free(&alloc, lj_arena_cellptr(target, start), BLOCK_BYTES);
+    }
+    while (alloc.bump[LJ_ARENAK_PLAIN].cell + lj_arena_ncells(large) <=
+           alloc.bump[LJ_ARENAK_PLAIN].end) {
+      void *p = lj_arena_alloc(&alloc, &rs, large, 0);
+      assert(p && lj_arena_of(p) == used);
+    }
+    check_bytes(value, large, 0xab);
+    value = lj_arena_alloc(&alloc, &rs, large, 0);
+    assert(value);
+    used = lj_arena_of(value);
+    assert(lj_arena_alloc_owned_count_acq(&alloc, LJ_ARENAK_PLAIN) == 3);
+  } else {
+    assert(lj_arena_alloc_owned_count_acq(&alloc, LJ_ARENAK_PLAIN) == 2);
+  }
+  assert(used == target);
+  for (i = targets; i < targets + slots; i++) {
+    assert(lj_arena_of(blocks[i]) == guard_arena);
+    check_bytes(blocks[i], BLOCK_BYTES, pattern(i));
+  }
+  lj_arena_alloc_fini(&alloc);
+  free(blocks);
+  return 1;
+}
+
 static void free_blocks(Workload *w, enum FreeSource source)
 {
   uint32_t i;
@@ -372,6 +450,10 @@ int main(int argc, char **argv)
   RUN("plain-remote", test_capacity(0, FREE_REMOTE));
   RUN("traversable-remote", test_capacity(LJ_AF_TRAVERSABLE, FREE_REMOTE));
   RUN("plain-late", test_capacity(0, FREE_LATE));
+  RUN("fragment-local", test_fragmented_plain(FRAGMENT_LOCAL));
+  RUN("fragment-remote", test_fragmented_plain(FRAGMENT_REMOTE));
+  RUN("fragment-reader", test_fragmented_plain(FRAGMENT_READER));
+  RUN("fragment-reserved", test_fragmented_plain(FRAGMENT_RESERVED));
   RUN("plain-search", test_search(0));
   RUN("traversable-search", test_search(LJ_AF_TRAVERSABLE));
   RUN("defensive-cycles", test_defensive_cycles());

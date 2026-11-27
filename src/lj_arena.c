@@ -6072,6 +6072,18 @@ static LJ_AINLINE int arena_bin_walk_cycle(ArenaBinWalk *walk,
   return 0;
 }
 
+static int arena_plain_blocks_empty(const GCArena *a, uint32_t start)
+{
+  uint32_t i, word = start >> 6;
+  /* The word containing the just-freed block usually still holds a neighbor. */
+  for (i = 0; i < LJ_ARENA_WORDS; i++) {
+    if (la_load64_acq(&a->block[word]))
+      return 0;
+    word = (word + 1u) % LJ_ARENA_WORDS;
+  }
+  return 1;
+}
+
 static int arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
                             uint32_t len)
 {
@@ -6109,7 +6121,12 @@ static int arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
       break;
     *pp = next;
   }
-  return arena_insert_run_head(alloc, a, start, len);
+  if (!arena_insert_run_head(alloc, a, start, len))
+    return 0;
+  if (k == LJ_ARENAK_PLAIN && !alloc->plain_empty_hint &&
+      arena_plain_blocks_empty(a, start))
+    alloc->plain_empty_hint = 1;
+  return 1;
 }
 
 static LJ_AINLINE uint32_t arena_remote_meta(uint32_t start, uint32_t len)
@@ -7494,13 +7511,17 @@ static int arena_unmap_bitmap_empty(const GCArena *a)
 
 /* A terminal claim closes body admissions. The exact registry delete also
 ** excludes readers which have not yet handed off to an arena count. */
-static int arena_unmap_certify_empty(TGAlloc *alloc, GCArena *a)
+static int arena_empty_while_closed(const GCArena *a)
 {
   return arena_unmap_bitmap_empty(a) && arena_unmap_side_empty(a) &&
     lj_arena_gcprep_pending_acq(a) == 0 &&
     la_loadptr_acq((void *const *)&a->hdr.remote_free) == NULL &&
-    la_loadptr_acq((void *const *)&a->hdr.plain_destruct) == NULL &&
-    arena_registry_delete(alloc, a);
+    la_loadptr_acq((void *const *)&a->hdr.plain_destruct) == NULL;
+}
+
+static int arena_unmap_certify_empty(TGAlloc *alloc, GCArena *a)
+{
+  return arena_empty_while_closed(a) && arena_registry_delete(alloc, a);
 }
 
 void lj_arena_alloc_unmap_dead_empty(TGAlloc *alloc, GCArena *a)
@@ -8867,11 +8888,102 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
   return n;
 }
 
-static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
-				  uint32_t flags)
+/* The owner can coalesce a fragmented PLAIN arena only when its published
+** bin nodes cover every payload cell. A reserved, unpublished bump span has
+** no block bit yet and must still exclude the arena from this operation. */
+static int arena_plain_bins_cover(TGAlloc *alloc, GCArena *a)
+{
+  uint64_t covered[LJ_ARENA_WORDS] = { 0 };
+  uint32_t cells = 0, b;
+  for (b = 0; b < LJ_ALLOC_NBINS; b++) {
+    LJArenaFreeRun *run;
+    ArenaBinWalk walk = { NULL, 0, 0 };
+    for (run = alloc->bins[LJ_ARENAK_PLAIN][b]; run; run = run->next) {
+      uint32_t start, len;
+      GCArena *owner;
+      if (arena_bin_walk_cycle(&walk, run) || !arena_free_run_ptr_ok(run))
+        return 0;
+      owner = lj_arena_of(run);
+      start = lj_arena_cellof(run);
+      /* A foreign writer may own an allocated body in another arena. Only
+      ** an owner-private free-run start supplies a link we can follow. */
+      if (lj_arena_state(owner, start) != 1 ||
+          !arena_free_run_valid_knownptr(run, &len))
+        return 0;
+      if (owner == a) {
+        cells += len;
+        while (len) {
+          uint32_t lo = start & 63u, take = len < 64u-lo ? len : 64u-lo;
+          uint64_t mask = arena_range_mask(lo, take);
+          if (covered[start >> 6] & mask)
+            return 0;
+          covered[start >> 6] |= mask;
+          start += take;
+          len -= take;
+        }
+      }
+    }
+  }
+  return cells == LJ_ARENA_CELLS - LJ_AFIRST_CELL;
+}
+
+static void arena_plain_unlink_runs(TGAlloc *alloc, GCArena *a)
+{
+  uint32_t b;
+  /* The complete chain was validated before the first mutation. Only this
+  ** allocator owner changes its free-run links. The mapping stays on its
+  ** original owned list and in the shared arena directory. */
+  for (b = 0; b < LJ_ALLOC_NBINS; b++) {
+    LJArenaFreeRun **link = &alloc->bins[LJ_ARENAK_PLAIN][b];
+    while (*link) {
+      LJArenaFreeRun *run = *link;
+      if (lj_arena_of(run) == a)
+        *link = run->next;
+      else
+        link = &run->next;
+    }
+    arena_refresh_binmask(alloc, LJ_ARENAK_PLAIN, b);
+  }
+}
+
+static GCArena *arena_plain_reuse_empty(TGAlloc *alloc)
+{
+  GCArena *a;
+  alloc->plain_empty_hint = 0;
+  for (a = alloc->owned[LJ_ARENAK_PLAIN]; a; a = lj_arena_next_acq(a)) {
+    uint64_t restore;
+    if ((lj_arena_flags_acq(a) & (LJ_AF_PREPSWEEP|LJ_AF_NEEDSWEEP|
+                                 LJ_AF_QUARANTINE|LJ_AF_RECLAIMED)) ||
+        !arena_unmap_bitmap_empty(a))
+      continue;
+    if (lj_arena_remote_active_acq(a) || !arena_unmap_claim(a, &restore)) {
+      alloc->plain_empty_hint = 1;
+      continue;
+    }
+    if (!restore && arena_empty_while_closed(a) &&
+        arena_plain_bins_cover(alloc, a) &&
+        arena_set_free_run(a, LJ_AFIRST_CELL, LJ_ARENA_CELLS - LJ_AFIRST_CELL)) {
+      arena_plain_unlink_runs(alloc, a);
+      lj_arena_bm_clear(a->mark, LJ_AFIRST_CELL);  /* Now a private bump. */
+      arena_unmap_abandon(a, restore);
+      alloc->plain_empty_hint = 1;  /* Other empty arenas may remain. */
+      return a;
+    }
+    arena_unmap_abandon(a, restore);
+  }
+  return NULL;
+}
+
+static GCArena *arena_refill_bump(TGAlloc *alloc, PRNGState *rs,
+                                  uint32_t flags)
 {
   uint32_t k = arena_kind(flags);
-  GCArena *a = arena_map(rs, flags, arena_alloc_host(alloc));
+  GCArena *a;
+  if (k == LJ_ARENAK_PLAIN && alloc->plain_empty_hint) {
+    a = arena_plain_reuse_empty(alloc);
+    if (a) goto refill;
+  }
+  a = arena_map(rs, flags, arena_alloc_host(alloc));
   if (!a)
     return NULL;
   lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
@@ -8888,6 +9000,7 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
   lj_arena_next_rel(a, alloc->owned[k]);
   alloc->owned[k] = a;
   arena_list_count_add(&alloc->owned_count[k], 1u);
+refill:
   alloc->bump[k].a = a;
   alloc->bump[k].cell = LJ_AFIRST_CELL;
   alloc->bump[k].end = LJ_ARENA_CELLS;
@@ -9133,7 +9246,7 @@ static int arena_reserve_bump_impl(TGAlloc *alloc, PRNGState *rs,
       *cellp = start;
       return 1;
     }
-    if (!arena_alloc_fresh(alloc, rs, flags))
+    if (!arena_refill_bump(alloc, rs, flags))
       return 0;
   }
   cell = b->cell;
@@ -9257,7 +9370,7 @@ void *lj_arena_alloc(TGAlloc *alloc, PRNGState *rs, size_t size,
 	  (void)lj_arena_remote_free_drain(alloc);
 	  continue;
 	}
-	if (!arena_alloc_fresh(alloc, rs, flags))
+	if (!arena_refill_bump(alloc, rs, flags))
 	  return NULL;
 	goto bump_alloc;
       }
