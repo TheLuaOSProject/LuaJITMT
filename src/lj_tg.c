@@ -647,14 +647,16 @@ static int tg_registry_link_attaching(global_State *g, TGState *tg)
   /* EMPTY is published only after all old arena wake routes have moved or
   ** disappeared. The claimed incarnation now owns this wake word. */
   la_store32_rlx(&slot->plain_free_pending, 0);
-  if (lj_tgregistry_try_publish_body(&key, tg, &snap) != LJ_TGSLOT_OK)
-    abort();
+  /* A reused slot is already visible. Initialize the reverse key and wake
+  ** routes before its release CAS makes the replacement body borrowable. */
   tg->registry_key = key;
   if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
     lj_arena_alloc_bind_plain_free_wake(&tg->alloc);
   /* A legacy-only missed attach may retry idempotently. Clear its per-body
-  ** exception before the stable head release makes this slot discoverable. */
+  ** exception before publishing the replacement body. */
   lj_tg_registry_shadow_missed_rel(tg, 0);
+  if (lj_tgregistry_try_publish_body(&key, tg, &snap) != LJ_TGSLOT_OK)
+    abort();
   if (reused) {
     tg_table_topology_changed(g);
     return 1;
