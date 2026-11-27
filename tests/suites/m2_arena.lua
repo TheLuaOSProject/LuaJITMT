@@ -133,10 +133,15 @@ return function(add)
       build.build_default(t)
       build.run_c_fixtures(t, { "t-arena-foreign-grow", "t-thread-live-slots" },
                            { timeout = "30s" })
-      local out = t:tmp("lj_t_arena_dead_plain")
-      build.compile_and_run_c(t, out, "t-arena-dead-plain.c",
-                              { env = { POOL = "0" }, timeout = "30s" })
-      t:run({ out }, { env = { POOL = "2" }, timeout = "30s" })
+      for _, name in ipairs({ "t-arena-dead-plain", "t-tg-dead-empty-live" }) do
+        local out = t:tmp(name)
+        local opts = { env = { POOL = "0" }, timeout = "30s" }
+        if name == "t-arena-dead-plain" then
+          opts.libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=munmap" }
+        end
+        build.compile_and_run_c(t, out, name .. ".c", opts)
+        t:run({ out }, { env = { POOL = "2" }, timeout = "30s" })
+      end
     end
   })
 
