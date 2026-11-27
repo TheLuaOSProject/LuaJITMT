@@ -1161,6 +1161,11 @@ LJ_FUNC void lj_arena_allocd_init(LJArenaAllocD *ad, TGAlloc *alloc,
 LJ_FUNC void lj_arena_allocd_sethugetab(LJArenaAllocD *ad, HugeTab *ht);
 LJ_FUNC void *lj_arena_allocd_alloc(LJArenaAllocD *ad, size_t size,
 				    uint32_t flags);
+/* Grow caller-owned raw storage from a different allocator. The old owner
+** remains the routing authority; only the destination may allocate. */
+LJ_FUNC void *lj_arena_allocd_grow_foreign(LJArenaAllocD *src,
+					 LJArenaAllocD *dst, void *ptr,
+					 size_t osize, size_t nsize);
 /* Publish READY for an exact fixed-layout small-arena allocation start. The
 ** constructor's CONSTRUCT/LIVE/RESCUE lane pins the mapping and incarnation,
 ** so this local operation deliberately needs no allocator registry reader. */

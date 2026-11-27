@@ -4936,6 +4936,7 @@ void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
   if (g->allocf == lj_arena_allocf) {
     LJArenaAllocD *ad = p ? gc_arena_allocd_for_ptr(g, p) :
 			    gc_arena_allocd_for_new(L);
+    LJArenaAllocD *dst = p && nsz > osz ? gc_arena_allocd_for_new(L) : ad;
     /* GC headers and unpublished constructor bodies have identity metadata
     ** tied to their exact allocation base and extent. They are deliberately
     ** non-reallocable; type-specific teardown must use lj_mem_free() after the
@@ -4945,7 +4946,10 @@ void *lj_mem_realloc(lua_State *L, void *p, GCSize osz, GCSize nsz)
       lj_assertG(0, "attempt to resize traversable GC allocation");
       abort();
     }
-    p = lj_arena_allocf(ad, p, osz, nsz);
+    if (dst != ad)
+      p = lj_arena_allocd_grow_foreign(ad, dst, p, osz, nsz);
+    else
+      p = lj_arena_allocf(ad, p, osz, nsz);
   } else {
     p = g->allocf(g->allocd, p, osz, nsz);
   }

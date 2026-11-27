@@ -9436,7 +9436,8 @@ static void arena_allocf_free(LJArenaAllocD *ad, void *ptr, size_t osize)
   lj_arena_free(ad->alloc, ptr, osize);
 }
 
-static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
+static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, LJArenaAllocD *dst,
+					 void *ptr,
 					 size_t osize, size_t nsize)
 {
   LJHugeInfo hi;
@@ -9471,7 +9472,7 @@ static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
     /* A reader admitted before BUSY owns the old capacity. Fall through
     ** to an allocate/copy/deferred-old release rather than rewriting it. */
   }
-  np = arena_allocf_new(ad, nsize, ad->flags);
+  np = arena_allocf_new(dst, nsize, ad->flags);
   if (!np) {
     int released = hugetab_release_realloc(ad->huge, ptr, &hi);
     lj_assertX(released, "huge realloc pin lost on allocation failure");
@@ -9482,14 +9483,14 @@ static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
   memcpy(np, ptr, csize);
   finish = hugetab_realloc_to_external_free(ad->huge, ptr, &hi);
   if (finish == LJ_HUGE_REALLOC_MOVE_PREEMPTED) {
-    arena_allocf_free(ad, np, nsize);
+    arena_allocf_free(dst, np, nsize);
     return NULL;
   }
   if (finish == LJ_HUGE_REALLOC_MOVE_DEFERRED)
     return np;
   if (finish != LJ_HUGE_REALLOC_MOVE_DIRECT) {
     (void)hugetab_release_realloc(ad->huge, ptr, NULL);
-    arena_allocf_free(ad, np, nsize);
+    arena_allocf_free(dst, np, nsize);
     return NULL;
   }
   finish = lj_arena_hugetab_finish_external_free(ad->huge, ptr, &hi);
@@ -9498,10 +9499,47 @@ static void *arena_allocf_realloc_huge(LJArenaAllocD *ad, void *ptr,
   if (finish == LJ_ARENA_HUGE_FINISH_UNMAP) {
     lj_arena_huge_unmap_claimed(ptr, hi.size);
   } else if (finish == LJ_ARENA_HUGE_FINISH_LOST) {
-    arena_allocf_free(ad, np, nsize);
+    arena_allocf_free(dst, np, nsize);
     return NULL;
   }
   return np;
+}
+
+static void *arena_allocf_move(LJArenaAllocD *src, LJArenaAllocD *dst,
+			       void *ptr, size_t osize, size_t nsize)
+{
+  void *np = arena_allocf_new(dst, nsize, src->flags);
+  if (!np)
+    return NULL;
+  memcpy(np, ptr, osize < nsize ? osize : nsize);
+  arena_allocf_free(src, ptr, osize);
+  return np;
+}
+
+void *lj_arena_allocd_grow_foreign(LJArenaAllocD *src, LJArenaAllocD *dst,
+				  void *ptr, size_t osize, size_t nsize)
+{
+  lj_assertX(src != dst && ptr && osize != 0 && nsize > osize,
+	     "invalid cross-owner allocation growth");
+  if (lj_arena_ishuge_base(ptr)) {
+    if (src->huge)
+      return arena_allocf_realloc_huge(src, dst, ptr, osize, nsize);
+  } else {
+    GCArena *a = lj_arena_of(ptr);
+    uint32_t cell = lj_arena_cellof(ptr);
+
+    if (arena_lifetime_managed(a) || cell < LJ_AFIRST_CELL ||
+	lj_arena_ncells(osize) > LJ_ARENA_CELLS - cell ||
+	lj_arena_cellptr(a, cell) != ptr ||
+	!lj_arena_bm_get(a->block, cell) || lj_arena_late_get(a, cell) ||
+	lj_arena_sweep_state_acq(a, cell) == LJ_ARENA_SWEEP_FREEING ||
+	!arena_side_owners_none(a, cell))
+      return NULL;
+  }
+  /* The caller retains the old allocation. Only the current allocator may
+  ** consume bump/bin state. Route the old release back through its normal
+  ** free path so an admitted reader can still defer body reuse. */
+  return arena_allocf_move(src, dst, ptr, osize, nsize);
 }
 
 void *lj_arena_allocd_alloc(LJArenaAllocD *ad, size_t size, uint32_t flags)
@@ -9626,17 +9664,8 @@ void *lj_arena_allocf(void *ud, void *ptr, size_t osize, size_t nsize)
     return NULL;
   oldhuge = lj_arena_ishuge_base(ptr);
   if (ad->huge && oldhuge)
-    return arena_allocf_realloc_huge(ad, ptr, osize, nsize);
-  if (ad->huge && nsize > LJ_HUGE_THRESHOLD) {
-    size_t csize;
-    void *np;
-    csize = osize < nsize ? osize : nsize;
-    np = arena_allocf_new(ad, nsize, ad->flags);
-    if (!np)
-      return NULL;
-    memcpy(np, ptr, csize);
-    arena_allocf_free(ad, ptr, osize);
-    return np;
-  }
+    return arena_allocf_realloc_huge(ad, ad, ptr, osize, nsize);
+  if (ad->huge && nsize > LJ_HUGE_THRESHOLD)
+    return arena_allocf_move(ad, ad, ptr, osize, nsize);
   return lj_arena_realloc(ad->alloc, ad->prng, ptr, osize, nsize, ad->flags);
 }
