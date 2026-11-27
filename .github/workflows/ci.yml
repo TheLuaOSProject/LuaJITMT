@@ -37,9 +37,13 @@ jobs:
       - name: Check shared execution with VM and recorder assertions
         run: |
           make -C src clean
-          make -C src -j2 CC=clang XCFLAGS=-DLUA_USE_ASSERT \
+          checks='-DLUA_USE_ASSERT -DLJ_GC2_TEST_HELPERS -DLJ_TAB_TEST_HELPERS'
+          make -C src -j2 CC=clang XCFLAGS="$checks" \
             TARGET_CFLAGS=-ftrivial-auto-var-init=pattern BUILDMODE=static
           tools/ci/linux_x64_shared.sh
+          clang -O2 -mcx16 $checks -Isrc tests/t-lockless-progress-metrics.c \
+            src/libluajit.a -lm -ldl -pthread -o "$RUNNER_TEMP/lj-progress"
+          timeout 30 "$RUNNER_TEMP/lj-progress"
 
   macos:
     name: macOS x86_64 build/run

@@ -109,8 +109,10 @@ static void *scalar_contention_reader(void *arg)
 {
   ScalarContention *c = (ScalarContention *)arg;
   uint32_t logical, attempt;
+  uint64_t sentinel;
   assert(lj_threading_attach(c->L));
   setintV(c->outroot, -9);
+  sentinel = tv_rawload(c->outroot);
   while (!la_load32_acq(&c->start)) la_cpu_pause();
   for (logical = 0; logical < SCALAR_CONTENTION_READS; logical++) {
     int found = 0;
@@ -129,7 +131,7 @@ static void *scalar_contention_reader(void *arg)
         found = 1;
         break;
       }
-      assert(tvisint(c->outroot) && intV(c->outroot) == -9);
+      assert(tv_rawload(c->outroot) == sentinel);
       assert(c->refusal_samples < SCALAR_CONTENTION_SAMPLES);
       c->refusal_ns[c->refusal_samples++] = elapsed;
       c->refusals++;
