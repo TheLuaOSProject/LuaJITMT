@@ -223,3 +223,23 @@ the original creator, a final owner that exits after an intervening transfer,
 and a late pthread destructor that still reads Lua data before exit.
 [Actor registration test](../tests/t-state-actor-carrier.c),
 [moved-close test](../tests/t-m8-close-moved-state.c).
+
+The profiler can now reuse a signal cell within its original hash bucket.
+On pthread exit the destructor clears the signal-visible TG address before
+releasing the owner. A handler walks the same permanent links and validates
+the owner after loading the address. If a new pthread's registration fails,
+the cell is immediately available for retry.
+
+| Pthreads per batch | Cells before reuse | Cells after reuse, three runs | Bytes after reuse |
+| ---: | ---: | --- | ---: |
+| 1 | 4,096 | 1, 1, 1 | 40 |
+| 8 | 4,096 | 9, 9, 9 | 360 |
+| 32 | 4,096 | 31, 32, 28 | 1,120–1,280 |
+
+Each process joined all 4,096 pthreads. A separate Linux test used 257
+caller-supplied stacks, failed registration on a reused cell, and sampled
+two live pthreads that previously used the same cell. The old cache failed
+in 15 of 15 processes. The new cache passed in 60 of 60 across five builds.
+Slots remain allocated for reuse after a peak and old process incarnations
+remain inaccessible after fork.
+[Signal reuse test](../tests/t-posix-signal-cell-reuse.c).

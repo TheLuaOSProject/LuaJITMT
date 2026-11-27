@@ -144,10 +144,10 @@ static uint32_t lj_thr_next_tid;
 static uint32_t lj_thr_next_actor;
 
 #if LJ_THR_TG_SIGNAL_CACHE
-/* Immutable hash nodes are never reclaimed. A signal handler snapshots one
-** bucket head and follows only next links initialized before publication, so
-** registration cannot create a retry/unlink race. Tag 1 mirrors an exact TLS
-** lease; tag 2 is the explicitly temporary same-thread profiler/raw bridge. */
+/* Each node stays in its original bucket. The process incarnation and next
+** link are immutable after publication. An owner of zero admits another
+** pthread from that bucket after the previous destructor cleared its mirror.
+** Tag 1 mirrors an exact lease and tag 2 is the same-thread raw profiler tag. */
 #define LJ_THR_TG_SIGNAL_BUCKETS 256u
 typedef struct LJThrTGSignalCell {
   struct LJThrTGSignalCell *next;
@@ -536,6 +536,7 @@ static void lj_thr_signal_cell_destructor(void *ptr)
 #else
   UNUSED(word);
 #endif
+  la_storeuptr_rel(&cell->owner, 0);
 }
 
 static int lj_thr_signal_key_ensure(void)
@@ -606,6 +607,7 @@ static LJThrTGSignalCell *lj_thr_signal_cell_prepare(void)
   uint64_t generation;
   uintptr_t process, owner;
   uint32_t bucket;
+  int fresh;
   int saved_errno = errno;
   if (!lj_thr_signal_key_ensure())
     return NULL;
@@ -614,7 +616,7 @@ static LJThrTGSignalCell *lj_thr_signal_cell_prepare(void)
   generation = la_load64_acq(&lj_tg_signal_generation);
   owner = lj_thr_signal_owner();
   if (cell && cell->generation == generation && cell->process == process &&
-      cell->owner == owner) {
+      la_loaduptr_acq(&cell->owner) == owner) {
     errno = saved_errno;
     return cell;
   }
@@ -622,21 +624,31 @@ static LJThrTGSignalCell *lj_thr_signal_cell_prepare(void)
     errno = saved_errno;
     return NULL;
   }
-  cell = NULL;
-#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
-  if (!lj_thr_signal_test_fail_now(&lj_tg_signal_test_fail_cell_alloc_after))
-#endif
-    cell = (LJThrTGSignalCell *)malloc(sizeof(*cell));
-  if (!cell) {
-    errno = saved_errno;
-    return NULL;
+  bucket = lj_thr_signal_bucket(generation, process, owner);
+  head = (LJThrTGSignalCell *)
+    la_loadptr_acq((void *const *)&lj_tg_signal_buckets[bucket]);
+  for (cell = head; cell; cell = cell->next) {
+    uintptr_t idle = 0;
+    if (cell->generation == generation && cell->process == process &&
+        la_loaduptr_rlx(&cell->owner) == 0 &&
+        la_casuptr(&cell->owner, &idle, owner, LA_ACQ_REL, LA_RLX))
+      break;
   }
-  cell->next = NULL;
-  cell->generation = generation;
-  cell->process = process;
-  cell->owner = owner;
-  la_storeuptr_rlx(&cell->tagged_word, 0);
-  /* A destructor may only observe a globally unpublished zero cell here. */
+  fresh = cell == NULL;
+  if (fresh) {
+#if defined(LJ_THR_SIGNAL_TEST_HELPERS)
+    if (!lj_thr_signal_test_fail_now(&lj_tg_signal_test_fail_cell_alloc_after))
+#endif
+      cell = (LJThrTGSignalCell *)malloc(sizeof(*cell));
+    if (!cell) {
+      errno = saved_errno;
+      return NULL;
+    }
+    cell->generation = generation;
+    cell->process = process;
+    la_storeuptr_rlx(&cell->owner, owner);
+    la_storeuptr_rlx(&cell->tagged_word, 0);
+  }
   {
     int publish_error;
 #if defined(LJ_THR_SIGNAL_TEST_HELPERS)
@@ -648,18 +660,20 @@ static LJThrTGSignalCell *lj_thr_signal_cell_prepare(void)
     publish_error = pthread_setspecific(lj_tg_signal_key, cell);
 #endif
     if (publish_error != 0) {
-      free(cell);
+      if (fresh)
+        free(cell);
+      else
+        la_storeuptr_rel(&cell->owner, 0);
       errno = saved_errno;
       return NULL;
     }
   }
-  bucket = lj_thr_signal_bucket(generation, process, owner);
-  do {
-    head = (LJThrTGSignalCell *)
-      la_loadptr_acq((void *const *)&lj_tg_signal_buckets[bucket]);
-    cell->next = head;
-  } while (!la_casptr((void **)&lj_tg_signal_buckets[bucket],
-                      (void **)&head, cell, LA_REL, LA_ACQ));
+  if (fresh) {
+    do {
+      cell->next = head;
+    } while (!la_casptr((void **)&lj_tg_signal_buckets[bucket],
+                        (void **)&head, cell, LA_REL, LA_ACQ));
+  }
   errno = saved_errno;
   return cell;
 }
@@ -700,9 +714,13 @@ static LJ_AINLINE uintptr_t lj_thr_signal_word_get(void)
     la_loadptr_acq((void *const *)&lj_tg_signal_buckets[bucket]);
   while (cell) {
     if (cell->generation == generation && cell->process == process &&
-        cell->owner == owner) {
+        la_loaduptr_acq(&cell->owner) == owner) {
       word = la_loaduptr_acq(&cell->tagged_word);
-      return word;
+      /* A word published by a successor orders that successor's owner claim
+      ** before this check. Only the interrupted pthread can publish for its
+      ** own live identity. */
+      if (la_loaduptr_acq(&cell->owner) == owner)
+        return word;
     }
     cell = cell->next;
   }

@@ -330,6 +330,15 @@ return function(add)
         local flags = signal_build_cflags(t)
         t:build({ clean = true, quiet = true, xcflags = flags })
         run_signal_safety_fixture(t, flags)
+        if jit and jit.os == "Linux" and t.target_arch == "x64" then
+          build.compile_and_run_c(t, t:tmp("lj_t-posix-signal-cell-reuse"),
+            "t-posix-signal-cell-reuse.c", {
+              cflags = flags,
+              libs = { "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+                       "-Wl,--wrap=pthread_setspecific" },
+              timeout = "20s"
+            })
+        end
       end)
       print("M4 POSIX signal cache/timer lifecycle tests passed")
     end
