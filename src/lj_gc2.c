@@ -11778,20 +11778,24 @@ static MSize gc2_weak_next_capacity(MSize cap, uint64_t need)
 
 static int gc2_weak_resize(global_State *g, MSize cap)
 {
-  lua_State *L;
   GCRef *oldstack, *newstack;
   uint8_t *oldready, *newready;
   MSize oldcap;
-  if (!g || cap == 0)
-    return 0;
-  L = mainthread_acq(g);
-  if (!L)
+  if (!g || cap == 0 || cap > GC2_WEAK_LIMIT)
     return 0;
   oldcap = gc2_weak_capacity_acq(g);
   oldstack = gc2_weak_stack_acq(g);
   oldready = gc2_weak_ready_acq(g);
-  newstack = lj_mem_newvec(L, cap, GCRef);
-  newready = lj_mem_newvec(L, cap, uint8_t);
+  /* The cycle leader can be a worker while the main thread is allocating.
+  ** Keep the previous pair installed until both replacements exist. */
+  newstack = (GCRef *)lj_mem_new_tg_nothrow(g, (GCSize)cap * sizeof(GCRef));
+  if (!newstack)
+    return 0;
+  newready = (uint8_t *)lj_mem_new_tg_nothrow(g, cap);
+  if (!newready) {
+    lj_mem_freevec(g, newstack, cap, GCRef);
+    return 0;
+  }
   gc2_weak_stack_rel(g, newstack);
   gc2_weak_ready_rel(g, newready);
   gc2_weak_capacity_rel(g, cap);
@@ -11820,28 +11824,14 @@ static int gc2_weak_overflow_push(global_State *g, GCtab *t)
   if (gc2_recovery_test_take_fail(&gc2_test_weak_overflow_fail_alloc))
     return 0;
 #endif
-  if (g->allocf == lj_arena_allocf) {
-    node = (GC2WeakOverflow *)lj_arena_allocd_alloc(
-      (LJArenaAllocD *)g->allocd, sizeof(*node), 0);
-  } else {
-    node = (GC2WeakOverflow *)g->allocf(g->allocd, NULL, 0, sizeof(*node));
-  }
+  /* A failed reservation leaves the existing table available for retry. */
+  node = (GC2WeakOverflow *)lj_mem_new_tg_nothrow(g, sizeof(*node));
   if (!node)
     return 0;
-  lj_assertG(checkptrGC(node),
-	     "allocated memory address %p outside required range", node);
-  lj_gc_total_add(g, sizeof(*node));
   gc2_weak_overflow_tab_rel(node, t);
   head = gc2_weak_overflow_acq(g);
   do {
     gc2_weak_overflow_next_rel(node, head);
-    /*
-    ** Weak snapshot overflow is a semantic slow path, not a warm mutator path.
-    ** Allocate with the raw allocator so a parked GC2 worker never longjmps
-    ** through a borrowed Lua stack. Allocation failure is not a durable
-    ** identity: traversal retains/requeues its table request and weak closure
-    ** rejects a reserved vector overflow without the corresponding node.
-    */
   } while (!gc2_weak_overflow_cas(g, &head, node));
   return 1;
 }
@@ -11929,7 +11919,6 @@ static void gc2_finclaim_copy_slot(lua_State *L, GCRef *newobj, TValue *newfin,
 
 static int gc2_finclaim_ensure(global_State *g)
 {
-  lua_State *L;
   GCRef *obj;
   TValue *fin;
   MSize cap;
@@ -11941,13 +11930,16 @@ static int gc2_finclaim_ensure(global_State *g)
   if (gc2_finreg_cdata_preclaim_objvec_acq(g) ||
       gc2_finreg_cdata_preclaim_finvec_acq(g) || cap != 0)
     return 0;
-  L = mainthread_acq(g);
-  if (!L)
+  obj = (GCRef *)lj_mem_new_tg_nothrow(g, GC2_FINCLAIM_FIXED * sizeof(GCRef));
+  if (!obj)
     return 0;
-  obj = lj_mem_newvec(L, GC2_FINCLAIM_FIXED, GCRef);
   /* Keep the first raw allocation live across construction of its peer. */
   (void)lj_gc2_markmem(g, obj);
-  fin = lj_mem_newvec(L, GC2_FINCLAIM_FIXED, TValue);
+  fin = (TValue *)lj_mem_new_tg_nothrow(g, GC2_FINCLAIM_FIXED * sizeof(TValue));
+  if (!fin) {
+    lj_mem_freevec(g, obj, GC2_FINCLAIM_FIXED, GCRef);
+    return 0;
+  }
   (void)lj_gc2_markmem(g, obj);
   (void)lj_gc2_markmem(g, fin);
   gc2_finreg_cdata_preclaim_objvec_rel(g, obj);

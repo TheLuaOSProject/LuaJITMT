@@ -407,6 +407,14 @@ return function(add)
           "-Wl,--wrap=pthread_create", "-Wl,--wrap=pthread_join"
         }
       })
+      if jit.os == "Linux" and jit.arch == "x64" then
+        compile_and_run_c(t, t:tmp("lj_t-gc2-worker-queues"),
+                          "t-gc2-worker-queues.c", {
+          libs = { "-lm", "-ldl", pthread,
+                   "-Wl,--wrap=lj_mem_new_tg_nothrow", "-Wl,--wrap=lj_mem_free" },
+          timeout = "30s"
+        })
+      end
       run_luajit_script_jit_modes(t, "t-gc-workers.lua")
 
       print("M3 GC2 worker scheduler test passed")
