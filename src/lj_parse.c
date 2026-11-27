@@ -1321,11 +1321,12 @@ static void gola_fixup(LexState *ls, FuncScope *bl)
 /* Find existing label. */
 static VarInfo *gola_findlabel(LexState *ls, GCstr *name)
 {
-  VarInfo *v = ls->vstack + ls->fs->bl->vstart;
-  VarInfo *ve = ls->vstack + ls->vtop;
-  for (; v < ve; v++)
+  MSize i;
+  for (i = ls->fs->bl->vstart; i < ls->vtop; i++) {
+    VarInfo *v = &ls->vstack[i];
     if (gcrefp(v->name, GCstr) == name && gola_islabel(v))
       return v;
+  }
   return NULL;
 }
 

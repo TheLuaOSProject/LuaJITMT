@@ -916,7 +916,7 @@ static void asm_fnew1num_arena_dtor_preflight(ASMState *as, Reg bit,
   ** occupant. BT is a read-only test: fail closed on a stale bit without
   ** clearing evidence that recovery/paranoia needs to diagnose. */
   emit_jcc(as, CC_B, impossible);
-  emit_rmro(as, (x86Op)XO_0f(a3), bit|REX_64, arena,
+  emit_rmro(as, XO_BT, bit|REX_64, arena,
 	    (int32_t)offsetof(GCArena, dtor) +
 	    (int32_t)(plane * LJ_ARENA_WORDS * sizeof(uint64_t)));
 }

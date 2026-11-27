@@ -194,18 +194,19 @@ typedef struct {
 /* -- Opcodes ------------------------------------------------------------- */
 
 /* Macros to construct variable-length x86 opcodes. -(len+1) is in LSB. */
-#define XO_(o)		((uint32_t)(0x0000fe + (0x##o<<24)))
-#define XO_FPU(a,b)	((uint32_t)(0x00fd + (0x##a<<16)+(0x##b<<24)))
-#define XO_0f(o)	((uint32_t)(0x0f00fd + (0x##o<<24)))
-#define XO_66(o)	((uint32_t)(0x6600fd + (0x##o<<24)))
-#define XO_660f(o)	((uint32_t)(0x0f66fc + (0x##o<<24)))
-#define XO_f20f(o)	((uint32_t)(0x0ff2fc + (0x##o<<24)))
-#define XO_f30f(o)	((uint32_t)(0x0ff3fc + (0x##o<<24)))
+#define XO_HIBYTE(o)	((uint32_t)0x##o << 24)
+#define XO_(o)		(0x0000fe | XO_HIBYTE(o))
+#define XO_FPU(a,b)	(0x00fd | (0x##a << 16) | XO_HIBYTE(b))
+#define XO_0f(o)	(0x0f00fd | XO_HIBYTE(o))
+#define XO_66(o)	(0x6600fd | XO_HIBYTE(o))
+#define XO_660f(o)	(0x0f66fc | XO_HIBYTE(o))
+#define XO_f20f(o)	(0x0ff2fc | XO_HIBYTE(o))
+#define XO_f30f(o)	(0x0ff3fc | XO_HIBYTE(o))
 
-#define XV_660f38(o)	((uint32_t)(0x79e2c4 + (0x##o<<24)))
-#define XV_f20f38(o)	((uint32_t)(0x7be2c4 + (0x##o<<24)))
-#define XV_f20f3a(o)	((uint32_t)(0x7be3c4 + (0x##o<<24)))
-#define XV_f30f38(o)	((uint32_t)(0x7ae2c4 + (0x##o<<24)))
+#define XV_660f38(o)	(0x79e2c4 | XO_HIBYTE(o))
+#define XV_f20f38(o)	(0x7be2c4 | XO_HIBYTE(o))
+#define XV_f20f3a(o)	(0x7be3c4 | XO_HIBYTE(o))
+#define XV_f30f38(o)	(0x7ae2c4 | XO_HIBYTE(o))
 
 /* This list of x86 opcodes is not intended to be complete. Opcodes are only
 ** included when needed. Take a look at DynASM or jit.dis_x86 to see the
@@ -288,6 +289,7 @@ typedef enum {
   XO_MOVSXw =	XO_0f(bf),
   XO_MOVSXd =	XO_(63),
   XO_CMPXCHG =	XO_0f(b1),
+  XO_BT =	XO_0f(a3),
   XO_BTS =	XO_0f(ab),
   XO_BTR =	XO_0f(b3),
   XO_BSWAP =	XO_0f(c8),
