@@ -131,7 +131,8 @@ return function(add)
     run = function(t)
       if jit.os ~= "Linux" or jit.arch ~= "x64" then return end
       build.build_default(t)
-      build.run_c_fixtures(t, { "t-arena-foreign-grow" }, { timeout = "30s" })
+      build.run_c_fixtures(t, { "t-arena-foreign-grow", "t-thread-live-slots" },
+                           { timeout = "30s" })
       local out = t:tmp("lj_t_arena_dead_plain")
       build.compile_and_run_c(t, out, "t-arena-dead-plain.c",
                               { env = { POOL = "0" }, timeout = "30s" })

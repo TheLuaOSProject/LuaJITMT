@@ -2361,7 +2361,6 @@ typedef struct global_State {
   uint64_t gcroot_repair_epoch;  /* Root-spine publications needing repair. */
   uint64_t gcroot_repaired_epoch;  /* Last root-spine repair scan epoch. */
   LJThreadLive *threading_live;  /* Lockless threading.thread root list. */
-  LJThreadLive *threading_live_retired;  /* Unlinked live-root tombstones. */
   uint32_t threading_live_count;  /* Non-tombstone threading.thread roots. */
   uint32_t thread_gcprep_pending;  /* Reserved/queued terminal destructors. */
   lua_State *threading_states;  /* All non-main lua_State objects. */

@@ -117,7 +117,7 @@ int main(void)
   GCudata *ud;
   LJThread *th;
   TValue *roots;
-  LJThreadLive *live, *retired;
+  LJThreadLive *live, *empty;
   GC2FinRegUDataNode *finreg;
   LJGC2ActivationSnap before;
 
@@ -136,7 +136,7 @@ int main(void)
   roots = lj_mem_newvec(L, 1, TValue);
   setnilV(&roots[0]);
   live = lj_mem_newt(L, sizeof(LJThreadLive), LJThreadLive);
-  retired = lj_mem_newt(L, sizeof(LJThreadLive), LJThreadLive);
+  empty = lj_mem_newt(L, sizeof(LJThreadLive), LJThreadLive);
   finreg = lj_mem_newt(L, sizeof(GC2FinRegUDataNode),
 		       GC2FinRegUDataNode);
   gc2_finreg_udata_obj_rel(finreg, obj2gco(ud));
@@ -144,7 +144,7 @@ int main(void)
 
   unmark_raw(roots);
   unmark_raw(live);
-  unmark_raw(retired);
+  unmark_raw(empty);
   unmark_raw(finreg);
   check_worker_overlap(g, finreg);
 
@@ -169,12 +169,10 @@ int main(void)
   assert_activation(g, &before);
   assert(!raw_marked(live));
 
-  lj_thread_live_next_rel(retired, NULL);
-  lj_thread_live_retired_next_rel(retired, NULL);
-  lj_thread_live_udata_ref_rel(retired, NULL);
-  lj_threading_test_live_node_retire(g, retired);
+  lj_threading_test_live_node_publish(L, ud, empty);
+  lj_thread_live_udata_ref_rel(empty, NULL);
   assert_activation(g, &before);
-  assert(!raw_marked(retired));
+  assert(!raw_marked(empty));
 
   lj_gc2_test_idle_reclaim_leave(g);
   assert(gc2_smr_reclaiming_acq(g) == 0);
@@ -182,15 +180,14 @@ int main(void)
 
   /* The tactical misses requested retry but did not manufacture lifetime.
   ** The unchanged mandatory root paths must now mark all four published raw
-  ** bodies: FINREG active list, thread userdata vector, and active/retired
-  ** threading node lists. */
+  ** bodies, including the cleared reusable slot as well as the live slot. */
   lj_gc2_mark_begin(g);
   lj_gc2_test_scan_roots(g, L);
   drain_mark_work(g);
   assert(raw_marked(finreg));
   assert(raw_marked(roots));
   assert(raw_marked(live));
-  assert(raw_marked(retired));
+  assert(raw_marked(empty));
   lj_gc2_cycle_to_idle(g);
 
   /* The active node above models only the raw publication/root-scan shape; it

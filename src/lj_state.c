@@ -1375,7 +1375,6 @@ LUA_API lua_State *lua_newstate(lua_Alloc allocf, void *allocd)
   g->tab_resize.resize_descs = NULL;
   g->tab_resize.resize_next_id = 0;
   g->threading_live = NULL;
-  g->threading_live_retired = NULL;
   g->threading_live_count = 0;
   g->thread_gcprep_pending = 0;
   g->thread_gcprep = NULL;

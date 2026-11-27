@@ -9378,28 +9378,6 @@ static void gc2_scan_threading_live_roots(global_State *g)
     }
   }
 
-  /* Tombstones are retained until terminal shutdown so an in-flight scanner
-  ** may finish following its stable active-next link. They are raw arena
-  ** allocations too, and therefore remain explicit native roots even after
-  ** their userdata reference is cleared. */
-  node = lj_thread_live_retired_head_acq(g);
-  gc2_root_cycle_guard_init(&guard, node);
-  while (node != NULL) {
-    GC2MarkScope scope;
-    int status = gc2_markmem_registered_scoped_status(g, node, &scope);
-    if (status == GC2_MARK_DEAD) {
-      gc2_mark_scope_leave(&scope);
-      gc2_root_scan_retry(g);
-      break;
-    }
-    next = lj_thread_live_retired_next_acq(node);
-    gc2_mark_scope_leave(&scope);
-    node = next;
-    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, node))) {
-      gc2_root_scan_retry(g);
-      break;
-    }
-  }
 }
 
 static void gc2_scan_finreg_udata_nodes(global_State *g)
