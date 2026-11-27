@@ -1206,7 +1206,7 @@ static int tg_dead_grace_done(global_State *g, TGState *main_tg, uint64_t epoch)
 {
   TGState *tg;
   uint32_t active = 0, mutators = 0, workers = gc2_n_workers_acq(g);
-  if (mt_entering_acq(g) || gc2_worker_control_acq(g) ||
+  if (mt_entering_acq(g) ||
       (workers && (gc2_worker_started_acq(g) != workers ||
 		   gc2_worker_exited_acq(g) != 0)))
     return 0;
@@ -1223,9 +1223,15 @@ static int tg_dead_grace_done(global_State *g, TGState *main_tg, uint64_t epoch)
       return 0;
   }
   /* An entrant may have sampled the old list before CAS-prepending itself.
-  ** Count the published cohort and exclude a concurrent pool transition. */
+  ** Count the published cohort. The final census holds pool control. */
   return active == gc2_n_threads_acq(g) && mutators == mt_live_acq(g) &&
-    !mt_entering_acq(g) && !gc2_worker_control_acq(g);
+    !mt_entering_acq(g);
+}
+
+static void tg_worker_control_leave(global_State *g)
+{
+  gc2_worker_control_rel(g, 0);
+  gc2_worker_control_futex_wake(g, 0x7fffffff);
 }
 
 static uint32_t tg_finish_empty_dead(global_State *g, int terminal)
@@ -1233,15 +1239,20 @@ static uint32_t tg_finish_empty_dead(global_State *g, int terminal)
   TGState *main_tg = g->main_tg, *tg = main_tg->dead_tg_head;
   LJTGRegistryKey key;
   LJTGRegistryBodySnap body;
-  uint32_t expect = LJ_GC2_SMR_OPEN;
+  uint32_t expect = 0;
   if (!tg || (!terminal && !tg_dead_grace_done(g, main_tg,
 					tg->dead_tg_unlinked_epoch)) ||
-      !gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_TG_EXCLUSIVE))
+      !gc2_worker_control_cas(g, &expect, 1))
     return 0;
+  /* A controller with no Lua TG may walk the raw registry during pool stop.
+  ** Reserve its existing control gate without waiting, through withdrawal. */
+  expect = LJ_GC2_SMR_OPEN;
+  if (!gc2_smr_reclaiming_cas(g, &expect, LJ_GC2_SMR_TG_EXCLUSIVE))
+    goto held;
   expect = 0;
   if (!gc2_tg_reclaiming_cas(g, &expect, 1)) {
     gc2_smr_reclaiming_rel(g, LJ_GC2_SMR_OPEN);
-    return 0;
+    goto held;
   }
   /* New attach/pool entrants cannot start an old raw walk between the
   ** grace census and withdrawal. Existing readers either acknowledge the
@@ -1251,7 +1262,7 @@ static uint32_t tg_finish_empty_dead(global_State *g, int terminal)
       (!terminal && !tg_dead_grace_done(g, main_tg,
 				      tg->dead_tg_unlinked_epoch))) {
     tg_reclaim_writer_leave(g);
-    return 0;
+    goto held;
   }
   key = tg->registry_key;
   body = lj_tgregistry_slot_body_snapshot(key.slot);
@@ -1262,6 +1273,7 @@ static uint32_t tg_finish_empty_dead(global_State *g, int terminal)
   if (!main_tg->dead_tg_head)
     main_tg->dead_tg_tail = NULL;
   tg_reclaim_writer_leave(g);
+  tg_worker_control_leave(g);
   /* Both discovery paths are gone. No reader from the old list or the stable
   ** slot can still acquire the body, and its allocators contain no mappings. */
   if (!lj_tg_fini_thread(g, tg))
@@ -1269,6 +1281,9 @@ static uint32_t tg_finish_empty_dead(global_State *g, int terminal)
   lj_mem_freet(g, tg);
   tg_registry_reclaim_finish(g, &key);
   return 1;
+held:
+  tg_worker_control_leave(g);
+  return 0;
 }
 
 static uint32_t tg_reclaim_dead(global_State *g, int terminal, int orphan)

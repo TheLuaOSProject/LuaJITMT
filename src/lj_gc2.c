@@ -2538,9 +2538,6 @@ static int gc2_worker_start_count_locked_l(global_State *g, uint32_t n,
   /* The explicit sole-mutator string pass never waits for pool control.  A
   ** competing enable either observes this gate here or loses the reciprocal
   ** publication/recheck below before it starts an OS worker. */
-  la_fence_seq();  /* Pairs worker_control admission with TG body withdrawal. */
-  if (gc2_tg_reclaiming_acq(g) != 0)
-    return 0;
   if (lj_str_reclaim_exclusive_acq(g) != 0)
     return 0;
   L = mainthread_acq(g);
