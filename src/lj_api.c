@@ -3750,6 +3750,8 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
 {
   global_State *g = G(L);
   int res = 0;
+  if (what == LUA_GCCOLLECT || what == LUA_GCSTEP)
+    lj_gc2_clear_unused_call_slots(L);
   switch (what) {
   case LUA_GCSTOP:
     api_gc_setlogical(g, LJ_MAX_MEM, 1);

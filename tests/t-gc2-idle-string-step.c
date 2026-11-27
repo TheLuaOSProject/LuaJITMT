@@ -16,7 +16,7 @@
 #include "lj_thr.h"
 
 static atomic_int enabled, target, parked, resume_peer, timed_out;
-static atomic_int allow_native, became_native;
+static atomic_int setup_native, allow_native, became_native;
 static int late_native;
 static uint64_t epoch0;
 
@@ -28,8 +28,21 @@ static void pause_briefly(void)
 
 static int peer_poll(lua_State *L)
 {
+  LJNativeFrame setup;
+  if (!lj_str_qcount_acq(G(L))) {
+    lua_pushboolean(L, atomic_load(&resume_peer));
+    return 1;
+  }
+  /* Let a real cohort form at a VM boundary, then keep the worker in C
+  ** until the explicit step sees it at IDLE. This closes the race with
+  ** automatic collection retiring every candidate between two steps. */
+  lj_native_enter_l(L, &setup);
+  atomic_store(&setup_native, 1);
+  while (!atomic_load(&target) && !atomic_load(&resume_peer))
+    pause_briefly();
+  (void)lj_native_leave_l(L, &setup);
   if (!atomic_load(&target)) {
-    lua_pushboolean(L, 0);
+    lua_pushboolean(L, 1);
     return 1;
   }
   assert(lj_tg_in_native_acq(L2TG(L)) == 0);
@@ -52,8 +65,9 @@ static int peer_poll(lua_State *L)
 int __real_lj_str_gc2_reclaim_checkpoint(global_State *, uint32_t);
 int __wrap_lj_str_gc2_reclaim_checkpoint(global_State *g, uint32_t limit)
 {
-  if (atomic_load(&enabled) && !atomic_load(&target) &&
-      gc2_phase_acq(g) == LJ_GC2_IDLE && !gc2_cycle_leader_acq(g) &&
+  if (atomic_load(&enabled) && atomic_load(&setup_native) &&
+      !atomic_load(&target) && gc2_phase_acq(g) == LJ_GC2_IDLE &&
+      !gc2_cycle_leader_acq(g) &&
       lj_str_body_retired_head_acq(g) && lj_str_qcount_acq(g) &&
       (uint32_t)lj_str_reclaim_scope_acq(g) == LJ_STR_RECLAIM_STEP) {
     epoch0 = gc2_hs_epoch_acq(g);
@@ -101,6 +115,9 @@ static void *watchdog(void *unused)
 {
   unsigned n;
   (void)unused;
+  /* The operation deadline starts when the checkpoint has been selected. */
+  while (!atomic_load(&target) && !atomic_load(&resume_peer))
+    pause_briefly();
   for (n = 0; n < 10000 && !atomic_load(&parked) && !atomic_load(&resume_peer); n++)
     pause_briefly();
   for (n = 0; n < 2000 && !atomic_load(&resume_peer); n++)
@@ -154,6 +171,9 @@ int main(int argc, char **argv)
   assert(pthread_join(timer, NULL) == 0);
   if (status)
     fprintf(stderr, "%s\n", lua_tostring(L, -1));
+  assert(!gc2_recovery_failed_acq(G(L)));
+  assert(lj_gc2_activation_snapshot(&G(L)->gc2.activation).state !=
+	 LJ_GC2_ACT_NO_RECLAIM);
   lua_close(L);
   assert(!status && atomic_load(&target));
   if (atomic_load(&timed_out)) {

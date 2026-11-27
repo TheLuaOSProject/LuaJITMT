@@ -14,6 +14,7 @@ local M8_C_FIXTURES = {
   "t-gc2-finreg-cdata-preclaim-roots",
   "t-gc2-finreg-udata-roots",
   "t-gc2-traverse",
+  "t-gc2-call-slots",
   "t-m8-ffi-weak-newindex",
   "t-m8-close-finalizers",
   "t-m8-close-moved-state",

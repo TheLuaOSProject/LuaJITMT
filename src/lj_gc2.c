@@ -8755,6 +8755,56 @@ static int gc2_parked_wait_frame(global_State *g, lua_State *L)
 	 ffid == FF_threading_sleep || ffid == FF_threading_mutex_lock;
 }
 
+/* At a direct interpreter call, slots above its arguments and all live
+** caller registers are available for reuse. Clear them before an explicit
+** collection can retire their referents. A later dispatch or native wait
+** can scan a wider stack than this physical owner. */
+void lj_gc2_clear_unused_call_slots(lua_State *L)
+{
+  TGState *tg = lj_thr_get_tg();
+  TValue *bot, *limit, *top, *frame, *caller;
+  const BCIns *pc;
+  GCproto *pt;
+  GCobj *uv;
+  if (!LJ_FR2 || !tg || tg->gl != G(L) || lj_tg_load_cur_L(tg) != L ||
+      !lj_tg_owns_state_acq(tg, L) || lj_tg_in_native_acq(tg) ||
+      !lj_safepoint_outer_lua_frame(L, tg))
+    return;
+  bot = tvref(L->stack) + LJ_FR2;
+  frame = L->base - 1;
+  if (frame <= bot || !frame_islua(frame) || !tvisfunc(frame-1) ||
+      isluafunc(frame_func(frame)))
+    return;
+  pc = frame_pc(frame);
+  if ((bc_op(pc[-1]) != BC_CALL && bc_op(pc[-1]) != BC_ITERC) ||
+      bc_c(pc[-1]) == 0)
+    return;
+  caller = frame_prevl(frame);
+  if (caller <= bot || !tvisfunc(caller-1) || !isluafunc(frame_func(caller)))
+    return;
+  pt = funcproto(frame_func(caller));
+  if ((uintptr_t)pc <= (uintptr_t)proto_bc(pt) ||
+      (uintptr_t)pc > (uintptr_t)(proto_bc(pt) + pt->sizebc))
+    return;
+  limit = tvref(L->maxstack);
+  top = caller + 1 + gc2_cur_topslot(pt, pc, 0, NULL);
+  if (top < L->top) top = L->top;
+  for (frame = frame_prev(caller); frame > bot; frame = frame_prev(frame)) {
+    if (tvisfunc(frame-1) && isluafunc(frame_func(frame))) {
+      TValue *end = frame + 1 + funcproto(frame_func(frame))->framesize;
+      if (end > top) top = end;
+    }
+  }
+  /* Open stack upvalues are ordered by descending slot. */
+  uv = lj_state_openupval_acq(L);
+  if (uv && uvval(gco2uv(uv)) >= top)
+    top = uvval(gco2uv(uv)) + 1;
+  while (top < limit) {
+    setnilV(top);
+    top++;
+  }
+}
+
 static TValue *gc2_stack_scan_top(global_State *g, lua_State *L, int parked,
 				  int *conservativep)
 {
