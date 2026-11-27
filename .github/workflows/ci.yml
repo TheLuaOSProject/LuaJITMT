@@ -55,6 +55,33 @@ jobs:
             TARGET_LDFLAGS=-fsanitize=undefined
           tools/ci/linux_x64_shared.sh
 
+  linux-tsan:
+    name: Linux x86_64 ThreadSanitizer
+    runs-on: ubuntu-24.04
+    env:
+      TSAN_OPTIONS: halt_on_error=1
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Build the instrumented runtime and exercise publication and shutdown
+        run: |
+          checks='-DLUA_USE_ASSERT -DLUA_USE_APICHECK -Wno-error=tsan'
+          instrument='-fsanitize=thread -fno-omit-frame-pointer -fno-pie'
+          make -C src -j2 CC=gcc BUILDMODE=static XCFLAGS="$checks" \
+            TARGET_CFLAGS="$instrument" TARGET_LDFLAGS='-fsanitize=thread -no-pie'
+          for name in t-tgregistry-slot t-vm-return-shutdown t-tg-auto-reap; do
+            gcc -O2 -g -mcx16 $checks $instrument -no-pie -Isrc \
+              "tests/$name.c" src/libluajit.a -lm -ldl -pthread -o "$RUNNER_TEMP/$name"
+          done
+          timeout 90 "$RUNNER_TEMP/t-tgregistry-slot"
+          timeout 60 "$RUNNER_TEMP/t-vm-return-shutdown"
+          for pool in 0 2; do
+            POOL=$pool JIT=on SPIN=1 timeout 90 "$RUNNER_TEMP/t-tg-auto-reap"
+            LJ_MT_SOAK_SHUTDOWN=1 LJ_MT_SOAK_GC=continuous \
+              timeout 90 src/luajit -jon tests/stress/kitchen.lua 2 4 "$pool" 19
+          done
+
   macos:
     name: macOS x86_64 build/run
     runs-on: macos-26-intel
