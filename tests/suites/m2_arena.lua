@@ -139,6 +139,11 @@ return function(add)
                        libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=munmap" } }
         build.compile_and_run_c(t, out, name .. ".c", opts)
         t:run({ out }, { env = { POOL = "2" }, timeout = "30s" })
+        if name == "t-tg-dead-empty-live" then
+          for _, pool in ipairs({ "0", "2" }) do
+            t:run({ out }, { env = { POOL = pool, SPIN = "1" }, timeout = "30s" })
+          end
+        end
       end
     end
   })
