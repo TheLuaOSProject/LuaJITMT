@@ -351,6 +351,7 @@ static void tg_init_common(global_State *g, TGState *tg, lua_State *L)
   la_store64_rlx(&tg->dead_tg_epoch, 0);
   tg->dead_tg_unlinked_epoch = 0;
   tg->dead_tg_head = tg->dead_tg_tail = NULL;
+  la_store32_rlx(&tg->dead_tg_debt, 0);
   tg_init_ssb(tg);
   la_storeptr_rlx((void **)&tg->fnew_cert_pt, NULL);
   la_storeptr_rlx((void **)&tg->fnew_cert_env, NULL);
@@ -1127,6 +1128,24 @@ static int tg_worker_retired_contains(global_State *g, TGState *target)
   return 0;
 }
 
+void lj_tg_reclaim_empty_wake(global_State *g)
+{
+  TGState *main_tg = g->main_tg;
+  if (main_tg && la_load32_acq(&main_tg->dead_tg_debt) &&
+      gc2_phase_acq(g) == LJ_GC2_IDLE && !mt_shutdown_acq(g) &&
+      lj_gc_auto_running(g))
+    lj_tg_checkpoint_request(main_tg, LJ_VM_TG_REAP);
+}
+
+void lj_tg_reclaim_empty_defer(global_State *g, TGState *tg)
+{
+  /* The handle has released its raw ownership before DEFER_FREE becomes
+  ** visible to another actor. Don't access the TG after this publication. */
+  (void)la_or8_acqrel(&tg->tg_flags, TGF_DEFER_FREE);
+  la_store32_rel(&g->main_tg->dead_tg_debt, 1);
+  lj_tg_reclaim_empty_wake(g);
+}
+
 void lj_tg_dead_read_checkpoint(TGState *tg)
 {
   TGState *main_tg = tg && tg->gl ? tg->gl->main_tg : NULL;
@@ -1134,8 +1153,10 @@ void lj_tg_dead_read_checkpoint(TGState *tg)
   if (!main_tg || tg == main_tg)
     return;
   epoch = la_load64_acq(&main_tg->dead_tg_epoch);
-  if (epoch != la_load64_acq(&tg->dead_tg_epoch))
+  if (epoch != la_load64_acq(&tg->dead_tg_epoch)) {
     la_store64_rel(&tg->dead_tg_epoch, epoch);
+    lj_tg_reclaim_empty_wake(tg->gl);
+  }
 }
 
 /* Only a detached empty allocator needs no ownership transfer. The GC worker
@@ -1160,20 +1181,24 @@ static int tg_detached_storage_empty(TGState *tg)
     lj_arena_hugetab_is_empty(&tg->huge);
 }
 
-static void tg_unlink_empty_dead(global_State *g, TGState *main_tg)
+static int tg_unlink_empty_dead(global_State *g, TGState *main_tg)
 {
   TGState *tg, *prev = NULL;
   uint64_t epoch = la_load64_acq(&main_tg->dead_tg_epoch);
   uint32_t unlinked = 0;
-  if (epoch == UINT64_MAX || gc2_tg_registry_incomplete_acq(g) ||
-      !lj_gc2_tg_unlink_try(g))
-    return;
+  int remaining = 0;
+  if (epoch == UINT64_MAX || gc2_tg_registry_incomplete_acq(g))
+    return 0;
+  if (!lj_gc2_tg_unlink_try(g))
+    return 1;
   epoch++;
   for (tg = gc2_tg_list_acq(g); tg && unlinked < 8;) {
     TGState *next = lj_tg_next_acq(tg);
     LJTGRegistryKey key;
     if (next == tg)
       break;
+    if (lj_tg_flags_test_acq(tg, TGF_DEFER_FREE))
+      remaining = 1;
     if (tg_detached_storage_empty(tg) && tg_registry_reclaim_begin(tg, &key)) {
       if (prev) {
 	lj_tg_next_rel(prev, next);
@@ -1197,9 +1222,16 @@ static void tg_unlink_empty_dead(global_State *g, TGState *main_tg)
     }
     tg = next;
   }
-  if (unlinked)
+  if (unlinked) {
+    /* A peer can acknowledge as soon as it reads the new epoch. Keep the
+    ** durable wake request published before exposing that acknowledgment. */
+    la_store32_rel(&main_tg->dead_tg_debt, 1);
     la_store64_rel(&main_tg->dead_tg_epoch, epoch);
+  }
   lj_gc2_tg_unlink_end(g, unlinked != 0);
+  if (unlinked && gc2_n_threads_acq(g) == 1)
+    lj_tg_reclaim_empty_wake(g);
+  return remaining;
 }
 
 static int tg_dead_grace_done(global_State *g, TGState *main_tg, uint64_t epoch)
@@ -1430,9 +1462,14 @@ uint32_t lj_tg_reclaim_empty_dead(global_State *g)
       !mt_shutdown_acq(g) && gc2_phase_acq(g) == LJ_GC2_IDLE) {
     while (n < 8 && tg_finish_empty_dead(g, 0))
       n++;
-    if (!tg_reclaim_dead_admissible(g, 0) &&
-	!main_tg->dead_tg_head)
-      tg_unlink_empty_dead(g, main_tg);
+    if (!main_tg->dead_tg_head) {
+      /* Consume prior debt before scanning. A concurrent handle finalizer
+      ** can publish fresh debt behind this observation. A retained grace
+      ** queue keeps its wake live until the old readers have answered. */
+      (void)la_xchg32_acqrel(&main_tg->dead_tg_debt, 0);
+      if (tg_unlink_empty_dead(g, main_tg))
+	la_store32_rel(&main_tg->dead_tg_debt, 1);
+    }
   }
   return n;
 }

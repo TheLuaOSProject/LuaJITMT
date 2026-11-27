@@ -1484,12 +1484,12 @@ LJLIB_CF(threading_thread___gc)
 	threading_live_remove(g, th);
 	lj_mem_freet(g, tg);
       } else {
-	/* The userdata is relinquishing the last external owner while an SSB
-	** publication still pins the embedded node storage. Let registry reclaim
-	** finalize it through lj_mem_* after the final pin is dropped. */
-	lj_tg_flags_or_rlx(th->tg, TGF_DEFER_FREE);
+	/* Release the handle's last raw ownership before making the TG
+	** eligible for an independent main-actor checkpoint. */
+	TGState *tg = th->tg;
 	th->tg = NULL;
 	lj_thread_state_store_rel(th, NULL);
+	lj_tg_reclaim_empty_defer(g, tg);
       }
     }
   }

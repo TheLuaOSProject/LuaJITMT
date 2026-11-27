@@ -4332,7 +4332,7 @@ static int gc_auto_string_checkpoint(lua_State *L, int context, int *drove)
   uint32_t reasons;
   if (tg != g->main_tg && !lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC))
     return LUA_OK;
-  reasons = la_xchg32_acqrel(&tg->str_auto_pending, 0);
+  reasons = lj_tg_checkpoint_take(tg, LJ_STR_AUTO_MASK);
   if (!reasons)
     return LUA_OK;
   if (!lj_gc_auto_running(g) ||

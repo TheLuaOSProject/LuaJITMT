@@ -3469,12 +3469,12 @@ uint64_t lj_gc2_flush_alloc_checkpoint(global_State *g, TGState *tg)
   if ((tg == g->main_tg || lj_tg_flags_test_acq(tg, TGF_LUA_ALLOC)) &&
       lj_gc_auto_running(g) &&
       lj_str_reclaim_request_acq(g) == LJ_STR_RECLAIM_NONE) {
-    uint32_t prior = la_load32_acq(&tg->str_auto_pending), next;
+    uint32_t prior = la_load32_acq(&tg->vm_checkpoint_pending), next;
     do {
       next = prior | LJ_STR_AUTO_ALLOC;
       if ((prior & LJ_STR_AUTO_RETIRE) && gc2_phase_acq(g) == LJ_GC2_IDLE)
         next |= LJ_STR_AUTO_RETRIED;
-    } while (!la_cas32(&tg->str_auto_pending, &prior, next, LA_ACQ_REL, LA_ACQ));
+    } while (!la_cas32(&tg->vm_checkpoint_pending, &prior, next, LA_ACQ_REL, LA_ACQ));
     /* Offer one actual owner turn after a completed IDLE epoch. A caller
     ** without a stack checkpoint cannot suppress a second allocation flush. */
     if (!(prior & LJ_STR_AUTO_RETRIED) && (next & LJ_STR_AUTO_RETRIED))
@@ -7156,6 +7156,7 @@ static void gc2_sweep_close_finish(global_State *g, uint64_t epoch)
   gc2_sweep_table_close_gate_store_sc(g, 0);
   gc2_sweep_to_idle_add(g, 1);
   gc2_phase_gate_release(g);
+  lj_tg_reclaim_empty_wake(g);
   if (lj_str_body_retired_head_acq(g) && lj_gc_auto_running(g))
     gc2_auto_string_retire_notify(g);
   lj_gc2_worker_wake(g);

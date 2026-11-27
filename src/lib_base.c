@@ -538,7 +538,7 @@ LJLIB_CF(collectgarbage)
   } else {
     int res = lua_gc(L, opt, data);
     if (opt == LUA_GCCOLLECT || (opt == LUA_GCSTEP && res))
-      lj_safepoint_collectgarbage_checkpoint(L);
+      lj_safepoint_reap_checkpoint(L);
     if (opt == LUA_GCSTEP || opt == LUA_GCISRUNNING)
       setboolV(L->top, res);
     else

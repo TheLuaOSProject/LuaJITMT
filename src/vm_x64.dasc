@@ -360,12 +360,12 @@ LJ_STATIC_ASSERT(sizeof(GCtab) == 80u);
 |// preserves the existing zero-cost not-taken poll edge while routing an
 |// atomic SIGPROF request through vm_safepoint into normal owner C context.
 |.define TGPOLL, qword [DISPATCH+DISPATCH_TG(poll)]
-|.define TGSTRAUTO, dword [DISPATCH+DISPATCH_TG(str_auto_pending)]
+|.define TGCHECKPOINT, dword [DISPATCH+DISPATCH_TG(vm_checkpoint_pending)]
 |
 |.macro vm_root_poll, target
 |  cmp TGPOLL, 0
 |  jnz target
-|  cmp TGSTRAUTO, 0
+|  cmp TGCHECKPOINT, 0
 |  jnz target
 |.endmacro
 |.define TGMARK, dword [DISPATCH+DISPATCH_TG(mark_active)]
@@ -5919,7 +5919,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
   |.define FOR_EXT,  [RA+24]
 
   case BC_FORL:
-    |  cmp TGSTRAUTO, 0
+    |  cmp TGCHECKPOINT, 0
     |  jz >6
     |  sub PC, 4
     |  jmp ->vm_safepoint_static
@@ -5996,7 +5996,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
       if (op == BC_IFORL) {
 	|  // FORL also dispatches here with JIT disabled. Finish the loop
 	|  // instruction before servicing maintenance, so replay is unnecessary.
-	|  cmp TGSTRAUTO, 0
+	|  cmp TGCHECKPOINT, 0
 	|  jnz ->vm_safepoint
       }
       |  ins_next
@@ -6081,7 +6081,7 @@ static void build_ins(BuildCtx *ctx, BCOp op, int defop)
     |.else
     |2:
     if (op == BC_IFORL) {
-      |  cmp TGSTRAUTO, 0
+      |  cmp TGCHECKPOINT, 0
       |  jnz ->vm_safepoint
     }
     |  ins_next

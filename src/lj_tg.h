@@ -319,7 +319,7 @@ struct TGState {
   uint32_t str_vm_main_pcall;  /* Top-level public main-state Lua entry. */
   void *str_vm_outer_cframe;  /* Frontend startup or managed Lua worker entry. */
   uint64_t str_owner_scan_epoch;  /* Completed owner-local root scan. */
-  uint32_t str_auto_pending;  /* Allocation debt for a rooted VM/API checkpoint. */
+  uint32_t vm_checkpoint_pending;  /* Requests for a rooted dispatch checkpoint. */
   uint64_t str_vm_root_epoch;  /* True owner dispatch checkpoint. */
   GCstr *str_source_pin;  /* Revalidated shared C API source. */
   StrTabHdr *strtab_active_hdr;
@@ -431,6 +431,7 @@ struct TGState {
   uint64_t dead_tg_epoch;  /* Main publication or this actor's safe epoch. */
   uint64_t dead_tg_unlinked_epoch;
   TGState *dead_tg_head, *dead_tg_tail;  /* Main-owned pending unlink queue. */
+  uint32_t dead_tg_debt;  /* A relinquished owner may need another main turn. */
 };
 
 LJ_STATIC_ASSERT(sizeof(((GC2SSBNode *)0)->slot) == TG_GC2_SSB_BYTES);
@@ -546,8 +547,8 @@ LJ_STATIC_ASSERT(offsetof(TGState, jit_event_sessions) >=
 LJ_STATIC_ASSERT(offsetof(TGState, vmevent_regkey) +
 		 sizeof(((TGState *)0)->vmevent_regkey) <= sizeof(TGState));
 LJ_STATIC_ASSERT(sizeof(TGState) -
-		 (offsetof(TGState, dead_tg_tail) +
-		  sizeof(((TGState *)0)->dead_tg_tail)) <
+		 (offsetof(TGState, dead_tg_debt) +
+		  sizeof(((TGState *)0)->dead_tg_debt)) <
 		 __alignof__(TGState));
 
 static LJ_AINLINE int32_t lj_tg_vmstate_load_acq(TGState *tg)
@@ -1028,15 +1029,33 @@ static LJ_AINLINE void lj_tg_ssb_active_rel(TGState *tg, GC2SSBNode *node)
 enum {
   LJ_STR_AUTO_ALLOC = 1,
   LJ_STR_AUTO_RETIRE = 2,
-  LJ_STR_AUTO_RETRIED = 4
+  LJ_STR_AUTO_RETRIED = 4,
+  LJ_STR_AUTO_MASK = LJ_STR_AUTO_ALLOC|LJ_STR_AUTO_RETIRE|LJ_STR_AUTO_RETRIED,
+  LJ_VM_TG_REAP = 8
 };
+
+static LJ_AINLINE void lj_tg_checkpoint_request(TGState *tg, uint32_t reasons)
+{
+  uint32_t expect = la_load32_acq(&tg->vm_checkpoint_pending);
+  while ((expect & reasons) != reasons &&
+         !la_cas32(&tg->vm_checkpoint_pending, &expect, expect | reasons,
+                   LA_ACQ_REL, LA_ACQ)) {}
+}
+
+static LJ_AINLINE uint32_t lj_tg_checkpoint_take(TGState *tg, uint32_t mask)
+{
+  uint32_t expect = la_load32_acq(&tg->vm_checkpoint_pending);
+  while (expect & mask) {
+    if (la_cas32(&tg->vm_checkpoint_pending, &expect, expect & ~mask,
+		 LA_ACQ_REL, LA_ACQ))
+      return expect & mask;
+  }
+  return 0;
+}
 
 static LJ_AINLINE void lj_tg_str_retire_pending(TGState *tg)
 {
-  uint32_t expect = la_load32_acq(&tg->str_auto_pending);
-  while (!(expect & LJ_STR_AUTO_RETIRE) &&
-         !la_cas32(&tg->str_auto_pending, &expect, expect | LJ_STR_AUTO_RETIRE,
-                   LA_ACQ_REL, LA_ACQ)) {}
+  lj_tg_checkpoint_request(tg, LJ_STR_AUTO_RETIRE);
 }
 
 static LJ_AINLINE GCRef *lj_tg_ssb_base_acq(const TGState *tg)
@@ -1647,6 +1666,8 @@ LJ_FUNC void lj_tg_registry_fini(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead(global_State *g);
 /* Only a certified outer Lua boundary may exempt main from the reader grace. */
 LJ_FUNC uint32_t lj_tg_reclaim_empty_dead(global_State *g);
+LJ_FUNC void lj_tg_reclaim_empty_defer(global_State *g, TGState *tg);
+LJ_FUNC void lj_tg_reclaim_empty_wake(global_State *g);
 LJ_FUNC void lj_tg_dead_read_checkpoint(TGState *tg);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal(global_State *g);
 LJ_FUNC uint32_t lj_tg_reclaim_dead_terminal_orphans(global_State *g);
