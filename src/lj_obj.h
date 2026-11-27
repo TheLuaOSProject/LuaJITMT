@@ -826,9 +826,8 @@ typedef struct TabResizeDesc {
 
 typedef struct GC2FinRegUDataNode {
   GCRef obj;		/* Userdata object tracked for metatable __gc. */
-  struct GC2FinRegUDataNode *next;
+  uintptr_t next;	/* Low bit freezes the outgoing edge before unlink. */
   struct GC2FinRegUDataNode *retired_next;
-  uint32_t active;	/* Node is still part of active discovery set. */
 } GC2FinRegUDataNode;
 
 typedef union LJTabShape {
@@ -2263,7 +2262,7 @@ typedef struct GC2State {
   uint64_t finreg_udata_clears;  /* Userdata finalizer clears mirrored. */
   uint64_t finreg_udata_queued;  /* Userdata finalizers queued for dispatch. */
   void *finreg_udata_head;  /* GC2-owned userdata metatable side list. */
-  void *finreg_udata_retired;  /* Unlinked nodes retained until teardown. */
+  void *finreg_udata_retired;  /* Fully unlinked records awaiting one free. */
   uint64_t finreg_udata_registered;  /* Userdata side-list nodes published. */
   uint64_t finreg_udata_retired_nodes;  /* Userdata side-list nodes unlinked. */
   uint64_t finreg_udata_discovered;  /* Userdata queued from side list. */
@@ -6339,42 +6338,42 @@ static LJ_AINLINE void gc2_finreg_udata_obj_clear(GC2FinRegUDataNode *node)
   setgcrefnullrel(node->obj);
 }
 
-static LJ_AINLINE uint32_t
+#define GC2_FINREG_UDATA_FROZEN ((uintptr_t)1)
+
+static LJ_AINLINE uintptr_t
+gc2_finreg_udata_link_acq(const GC2FinRegUDataNode *node)
+{
+  return la_loaduptr_acq(&node->next);
+}
+
+static LJ_AINLINE int
 gc2_finreg_udata_active_acq(const GC2FinRegUDataNode *node)
 {
-  return la_load32_acq(&node->active);
+  return (gc2_finreg_udata_link_acq(node) & GC2_FINREG_UDATA_FROZEN) == 0;
 }
 
-static LJ_AINLINE void gc2_finreg_udata_active_rel(GC2FinRegUDataNode *node,
-						   uint32_t active)
+static LJ_AINLINE GC2FinRegUDataNode *
+gc2_finreg_udata_link_next(uintptr_t link)
 {
-  la_store32_rel(&node->active, active);
-}
-
-static LJ_AINLINE int gc2_finreg_udata_active_retire(GC2FinRegUDataNode *node)
-{
-  uint32_t old = 1;
-  return la_cas32(&node->active, &old, 0, LA_ACQ_REL, LA_ACQ);
+  return (GC2FinRegUDataNode *)(link & ~GC2_FINREG_UDATA_FROZEN);
 }
 
 static LJ_AINLINE GC2FinRegUDataNode *
 gc2_finreg_udata_next_acq(const GC2FinRegUDataNode *node)
 {
-  return (GC2FinRegUDataNode *)la_loadptr_acq((void *const *)&node->next);
+  return gc2_finreg_udata_link_next(gc2_finreg_udata_link_acq(node));
 }
 
 static LJ_AINLINE void gc2_finreg_udata_next_rel(GC2FinRegUDataNode *node,
 						 GC2FinRegUDataNode *next)
 {
-  la_storeptr_rel((void **)&node->next, next);
+  la_storeuptr_rel(&node->next, (uintptr_t)next);
 }
 
-static LJ_AINLINE int gc2_finreg_udata_next_cas(GC2FinRegUDataNode *node,
-						GC2FinRegUDataNode **oldp,
-						GC2FinRegUDataNode *next)
+static LJ_AINLINE int gc2_finreg_udata_link_cas(GC2FinRegUDataNode *node,
+					       uintptr_t *oldp, uintptr_t link)
 {
-  return la_casptr((void **)&node->next, (void **)oldp, next,
-		   LA_ACQ_REL, LA_ACQ);
+  return la_casuptr(&node->next, oldp, link, LA_ACQ_REL, LA_ACQ);
 }
 
 static LJ_AINLINE GC2FinRegUDataNode *

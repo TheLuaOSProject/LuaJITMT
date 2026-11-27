@@ -122,15 +122,15 @@ return function(add)
 
   add({
     name = "m8_gc2_finreg_udata_roots",
-    description = "GC2 userdata FINREG active/retired raw-root lifetime",
+    description = "GC2 userdata FINREG leased unlink and retirement",
     run = function(t)
-      t:build({ clean = true, quiet = true })
+      t:build({ clean = true, quiet = true, xcflags = gc2_test_cflags })
       build.run_c_fixtures(t, { "t-gc2-finreg-udata-roots" }, {
         output_suffix = "_m8",
         cflags = gc2_test_cflags,
         timeout = "20s"
       })
-      print("M8 userdata FINREG raw-root lifetime passed")
+      print("M8 userdata FINREG retirement passed")
     end
   })
 

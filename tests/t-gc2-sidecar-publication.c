@@ -141,7 +141,6 @@ int main(void)
 		       GC2FinRegUDataNode);
   gc2_finreg_udata_obj_rel(finreg, obj2gco(ud));
   gc2_finreg_udata_retired_next_rel(finreg, NULL);
-  gc2_finreg_udata_active_rel(finreg, 1);
 
   unmark_raw(roots);
   unmark_raw(live);

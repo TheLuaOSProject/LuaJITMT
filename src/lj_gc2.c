@@ -1274,6 +1274,8 @@ static int lj_gc2_finalizer_try_enter(global_State *g);
 int lj_gc2_finalizer_owned_by_current(global_State *g);
 static int gc2_finalizer_queue_pending(global_State *g);
 static int gc2_finalizer_sweep_pending(global_State *g);
+static uint32_t gc2_finreg_udata_drain(global_State *g);
+enum { GC2_FINREG_UDATA_BATCH = 16 };
 static void gc2_peer_wait_no_l(void);
 static void gc2_peer_wait_l(lua_State *L);
 static void gc2_peer_wait_owned_l(lua_State *L);
@@ -2118,6 +2120,8 @@ void lj_gc2_fini(global_State *g)
     gc2_finreg_cdata_preclaim_count_store_rlx(g, 0);
   }
   if (g) {
+    /* All actors have joined. Frozen records can still be on the active
+    ** list, and every node belongs to exactly one of these lists. */
     GC2FinRegUDataNode *node =
       gc2_finreg_udata_head_xchg_acqrel(g, NULL);
     while (node) {
@@ -2126,8 +2130,7 @@ void lj_gc2_fini(global_State *g)
 	abort();
       }
       GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
-      if (gc2_finreg_udata_active_acq(node))
-	lj_mem_freet(g, node);
+      lj_mem_freet(g, node);
       node = next;
     }
     node = gc2_finreg_udata_retired_xchg_acqrel(g, NULL);
@@ -2137,6 +2140,7 @@ void lj_gc2_fini(global_State *g)
 	abort();
       }
       GC2FinRegUDataNode *next = gc2_finreg_udata_retired_next_acq(node);
+      lj_assertG(!gc2_finreg_udata_active_acq(node), "unfrozen retired FINREG node");
       lj_mem_freet(g, node);
       node = next;
     }
@@ -2782,6 +2786,8 @@ static int gc2_worker_park_timeout_ns(global_State *g)
 {
   enum { GC2_ACTIVE_PARK_TIMEOUT_NS = 10000000 };
   uint32_t phase = gc2_phase_acq(g);
+  if (la_load32_acq(&g->allocf_arena) != 0 && gc2_finreg_udata_retired_acq(g))
+    return GC2_ACTIVE_PARK_TIMEOUT_NS;  /* Retry a transient head lease miss. */
   if (gc2_collection_stalled(g))
     return -1;
   if (phase == LJ_GC2_IDLE && gc2_fixpoint_epoch_actions_acq(g) == 0 &&
@@ -2866,10 +2872,12 @@ static void *gc2_worker_main(void *arg)
     if (gc2_mark_activation_request_acq(g) || gc2_fixpoint_epoch_actions_acq(g))
       total = (uint32_t)lj_gc2_resumable_epoch_continue(g);
     for (;;) {
-      uint32_t step, forward = 0;
+      uint32_t step, forward = 0, freed;
       uint64_t defer0;
       if (gc2_worker_stop_acq(g) != 0)
 	break;
+      /* Retired records are independent of collector phase ownership. */
+      freed = gc2_finreg_udata_drain(g);
       defer0 = gc2_deferred_epoch_acq(g);
       step = gc2_worker_drain_inner(
 	g, tg, LJ_GC2_WORKER_DRAIN_BATCH, &forward, 0);
@@ -2877,7 +2885,7 @@ static void *gc2_worker_main(void *arg)
 	deferred = 1;
 	break;
       }
-      if (step == 0)
+      if (step == 0 && freed == 0)
 	break;
       total = step > ~(uint32_t)0 - total ? ~(uint32_t)0 : total + step;
     }
@@ -3055,6 +3063,7 @@ int lj_gc2_collect_active(lua_State *L)
   tg = L2TG(L);
   if (!g || !tg)
     return 0;
+  gc2_finreg_udata_drain(g);
 #if LJ_HASJIT
   /* A full collection invoked from a recorder-owned callback/allocation cannot
   ** wait for that same recorder to reach IDLE: the recorder cannot unwind
@@ -3242,6 +3251,7 @@ static int gc2_step(lua_State *L, uint32_t budget, uint32_t sweep_limit)
   tg = L2TG(L);
   if (!g || !tg)
     return 0;
+  gc2_finreg_udata_drain(g);
   if (budget == 0)
     budget = 1;
   if (budget > (1u << 20))
@@ -5519,26 +5529,194 @@ int lj_gc2_finalizer_phase_pending(global_State *g)
   return gc2_finalizer_queue_pending(g);
 }
 
+#if defined(LJ_GC2_TEST_HELPERS)
+static uintptr_t gc2_finreg_udata_test_node;
+static uint32_t gc2_finreg_udata_test_stage;
+
+void lj_gc2_test_finreg_udata_pause(GC2FinRegUDataNode *node, uint32_t stage)
+{
+  la_storeuptr_rel(&gc2_finreg_udata_test_node, (uintptr_t)node);
+  la_store32_rel(&gc2_finreg_udata_test_stage, stage);
+}
+
+int lj_gc2_test_finreg_udata_paused(void)
+{
+  return la_load32_acq(&gc2_finreg_udata_test_stage) == UINT32_MAX;
+}
+
+void lj_gc2_test_finreg_udata_release(void)
+{
+  la_store32_rel(&gc2_finreg_udata_test_stage, 0);
+}
+
+static void gc2_finreg_udata_test_pause_at(GC2FinRegUDataNode *node,
+					 uint32_t stage)
+{
+  if (la_load32_acq(&gc2_finreg_udata_test_stage) == stage &&
+      la_loaduptr_acq(&gc2_finreg_udata_test_node) == (uintptr_t)node &&
+      la_cas32(&gc2_finreg_udata_test_stage, &stage, UINT32_MAX,
+	       LA_ACQ_REL, LA_ACQ)) {
+    while (lj_gc2_test_finreg_udata_paused())
+      la_cpu_pause();
+  }
+}
+#else
+#define gc2_finreg_udata_test_pause_at(node, stage) ((void)0)
+#endif
+
+typedef struct GC2FinRegUDataWalk {
+  GC2FinRegUDataNode *prev, *node;
+  LJGC2Lease prev_lease, lease;
+} GC2FinRegUDataWalk;
+
+static int gc2_finreg_udata_lease_try(global_State *g,
+				      GC2FinRegUDataNode *node, LJGC2Lease *lease)
+{
+  /* Non-arena allocators retain all records until joined teardown. */
+  return !node || la_load32_acq(&g->allocf_arena) == 0 ||
+    lj_gc2_small_lease_try(g, node, sizeof(*node), 0, lease, NULL);
+}
+
+static void gc2_finreg_udata_walk_release(GC2FinRegUDataWalk *walk)
+{
+  lj_gc2_lease_release(&walk->lease);
+  lj_gc2_lease_release(&walk->prev_lease);
+  walk->prev = walk->node = NULL;
+}
+
+static int gc2_finreg_udata_walk_start(global_State *g,
+				       GC2FinRegUDataWalk *walk)
+{
+  GC2FinRegUDataNode *node = gc2_finreg_udata_head_acq(g);
+  if (!node)
+    return 1;
+  if (!gc2_finreg_udata_lease_try(g, node, &walk->lease))
+    return 0;
+  if (gc2_finreg_udata_head_acq(g) != node) {
+    lj_gc2_lease_release(&walk->lease);
+    return 0;
+  }
+  walk->node = node;
+  return 1;
+}
+
+/* A successful splice is the unique ownership transfer from the active list
+** to the splicer, which owns just that record until its retired-head CAS.
+** Publishers only copy the head address. They can link to a new incarnation
+** at that address if it is the current head at the CAS. */
+static void gc2_finreg_udata_push_retired(global_State *g, GC2FinRegUDataNode *node)
+{
+  GC2FinRegUDataNode *head = gc2_finreg_udata_retired_acq(g);
+  do {
+    gc2_finreg_udata_retired_next_rel(node, head);
+  } while (!gc2_finreg_udata_retired_cas(g, &head, node));
+  gc2_finreg_udata_test_pause_at(node, LJ_GC2_FINREG_TEST_PUBLISHED);
+  lj_gc2_worker_wake(g);
+}
+
+/* Acquire and validate the successor before reading anything from it. A
+** detached predecessor has frozen its own outgoing link, so a splice with
+** an untagged expected link cannot succeed through a detached predecessor.
+** Failure leaves the caller's two leases intact for release and restart. */
+static int gc2_finreg_udata_walk_step(global_State *g,
+				      GC2FinRegUDataWalk *walk)
+{
+  GC2FinRegUDataNode *node = walk->node;
+  GC2FinRegUDataNode *next;
+  LJGC2Lease next_lease = {0};
+  uintptr_t link = gc2_finreg_udata_link_acq(node);
+  if (!(link & GC2_FINREG_UDATA_FROZEN) && !gc2_finreg_udata_obj_acq(node)) {
+    uintptr_t frozen = link | GC2_FINREG_UDATA_FROZEN;
+    if (!gc2_finreg_udata_link_cas(node, &link, frozen))
+      return 0;
+    link = frozen;
+    gc2_finreg_udata_retired_nodes_add(g, 1);
+    gc2_finreg_udata_test_pause_at(node, LJ_GC2_FINREG_TEST_FROZEN);
+  }
+  next = gc2_finreg_udata_link_next(link);
+  if (!gc2_finreg_udata_lease_try(g, next, &next_lease))
+    return 0;
+  if (gc2_finreg_udata_link_acq(node) != link)
+    goto retry;
+  if (link & GC2_FINREG_UDATA_FROZEN) {
+    gc2_finreg_udata_test_pause_at(node, LJ_GC2_FINREG_TEST_BEFORE_SPLICE);
+    if (walk->prev) {
+      uintptr_t expected = (uintptr_t)node;
+      if (!gc2_finreg_udata_link_cas(walk->prev, &expected, (uintptr_t)next))
+	goto retry;
+    } else {
+      GC2FinRegUDataNode *expected = node;
+      if (!gc2_finreg_udata_head_cas(g, &expected, next))
+	goto retry;
+    }
+    gc2_finreg_udata_test_pause_at(node, LJ_GC2_FINREG_TEST_UNLINKED);
+    gc2_finreg_udata_push_retired(g, node);
+    lj_gc2_lease_release(&walk->lease);
+  } else {
+    lj_gc2_lease_release(&walk->prev_lease);
+    walk->prev = node;
+    walk->prev_lease = walk->lease;
+  }
+  walk->node = next;
+  walk->lease = next_lease;
+  return 1;
+retry:
+  lj_gc2_lease_release(&next_lease);
+  return 0;
+}
+
+static void gc2_finreg_udata_mark_held(global_State *g,
+				       const GC2FinRegUDataWalk *walk)
+{
+  if (walk->lease.arena) {
+    (void)gc2_mark_small_cell_admitted(g, (GCArena *)walk->lease.arena,
+      lj_arena_cellof(walk->node), (int)walk->lease.admission, NULL);
+  }
+}
+
+static uint32_t gc2_finreg_udata_drain(global_State *g)
+{
+  TGState *self;
+  uint32_t n = 0, i;
+  if (gc2_finreg_udata_retired_acq(g) == NULL ||
+      la_load32_acq(&g->allocf_arena) == 0)
+    return 0;
+  /* lj_mem_free routes through the raw TG directory. An attached secondary
+  ** actor keeps its TG live through this call. Only the main TG's own actor
+  ** can reclaim the directory when no secondary actors are live. */
+  self = lj_thr_get_tg_fallback(g);
+  if (!self || lj_tg_flags_test_acq(self, TGF_DEAD))
+    return 0;
+  for (i = 0; i < GC2_FINREG_UDATA_BATCH; i++) {
+    GC2FinRegUDataNode *node = gc2_finreg_udata_retired_acq(g);
+    LJGC2Lease lease = {0};
+    int popped = 0;
+    if (!node)
+      break;
+    if (!gc2_finreg_udata_lease_try(g, node, &lease))
+      continue;
+    if (gc2_finreg_udata_retired_acq(g) == node) {
+      GC2FinRegUDataNode *expected = node;
+      GC2FinRegUDataNode *next = gc2_finreg_udata_retired_next_acq(node);
+      /* The head lease precludes reuse, and its immutable retired link needs
+      ** no successor read. Each incarnation is pushed and popped once. */
+      popped = gc2_finreg_udata_retired_cas(g, &expected, next);
+    }
+    lj_gc2_lease_release(&lease);
+    if (popped) {
+      gc2_finreg_udata_test_pause_at(node, LJ_GC2_FINREG_TEST_POPPED);
+      lj_mem_freet(g, node);
+      n++;
+    }
+  }
+  return n;
+}
+
 static int gc2_finreg_udata_close_pending(global_State *g)
 {
-  GC2FinRegUDataNode *node;
-  GC2RootCycleGuard guard;
-  if (!g)
-    return 0;
-  node = gc2_finreg_udata_head_acq(g);
-  gc2_root_cycle_guard_init(&guard, node);
-  while (node) {
-    GC2FinRegUDataNode *next;
-    if (!lj_gc2_mem_registered(g, node))
-      return 1;  /* Invalid metadata cannot prove terminal quiescence. */
-    if (gc2_finreg_udata_active_acq(node))
-      return 1;
-    next = gc2_finreg_udata_next_acq(node);
-    node = next;
-    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, node)))
-      return 1;
-  }
-  return 0;
+  /* Close has joined the managed actors. Finalize helps remove inactive
+  ** records before returning so every remaining active-list entry is work. */
+  return g && gc2_finreg_udata_head_acq(g) != NULL;
 }
 
 int lj_gc2_finalizer_close_pending(global_State *g)
@@ -9224,50 +9402,26 @@ static void gc2_scan_threading_live_roots(global_State *g)
 
 static void gc2_scan_finreg_udata_nodes(global_State *g)
 {
-  GC2FinRegUDataNode *node, *next;
-  GC2RootCycleGuard guard;
-  /* These records are native ownership metadata, not semantic userdata roots:
-  ** retaining node->obj here would prevent ordinary finalizer discovery. Hold
-  ** the raw allocation admission only long enough to load its stable link. */
-  node = gc2_finreg_udata_head_acq(g);
-  gc2_root_cycle_guard_init(&guard, node);
-  while (node != NULL) {
-    GC2MarkScope scope;
-    int status = gc2_markmem_registered_scoped_status(g, node, &scope);
-    if (status == GC2_MARK_DEAD) {
-      gc2_mark_scope_leave(&scope);
-      gc2_root_scan_retry(g);
-      break;
+  GC2FinRegUDataWalk walk = {0};
+  unsigned retry;
+  /* Active records are raw metadata roots. Marking the userdata through this
+  ** edge would keep it alive and prevent ordinary finalizer discovery. */
+  for (retry = 0; retry < GC2_FINREG_UDATA_BATCH; retry++) {
+    if (gc2_finreg_udata_walk_start(g, &walk)) {
+      while (walk.node) {
+	if (gc2_finreg_udata_active_acq(walk.node))
+	  gc2_finreg_udata_mark_held(g, &walk);
+	if (!gc2_finreg_udata_walk_step(g, &walk))
+	  break;
+      }
+      if (!walk.node) {
+	gc2_finreg_udata_walk_release(&walk);
+	return;
+      }
     }
-    next = gc2_finreg_udata_next_acq(node);
-    gc2_mark_scope_leave(&scope);
-    node = next;
-    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, node))) {
-      gc2_root_scan_retry(g);
-      break;
-    }
+    gc2_finreg_udata_walk_release(&walk);
   }
-
-  /* Logical retirement leaves the active link stable for in-flight readers;
-  ** the separate retired list owns the same raw record until final shutdown. */
-  node = gc2_finreg_udata_retired_acq(g);
-  gc2_root_cycle_guard_init(&guard, node);
-  while (node != NULL) {
-    GC2MarkScope scope;
-    int status = gc2_markmem_registered_scoped_status(g, node, &scope);
-    if (status == GC2_MARK_DEAD) {
-      gc2_mark_scope_leave(&scope);
-      gc2_root_scan_retry(g);
-      break;
-    }
-    next = gc2_finreg_udata_retired_next_acq(node);
-    gc2_mark_scope_leave(&scope);
-    node = next;
-    if (LJ_UNLIKELY(!gc2_root_cycle_guard_step(&guard, node))) {
-      gc2_root_scan_retry(g);
-      break;
-    }
-  }
+  gc2_root_scan_retry(g);
 }
 
 static void gc2_scan_pending_roots(global_State *g)
@@ -9276,7 +9430,6 @@ static void gc2_scan_pending_roots(global_State *g)
     return;
   lj_gc2_finalizer_mark_all(g, gc2_mark_finalizer_obj);
   gc2_scan_threading_live_roots(g);
-  gc2_scan_finreg_udata_nodes(g);
 #if LJ_HASFFI
   gc2_mark_finreg_cdata_preclaims(g, gc2_finreg_markobj,
 				   gc2_finreg_marktv);
@@ -10283,6 +10436,7 @@ static void gc2_scan_global_roots(global_State *g)
   gc2_scan_jit_roots(g);
 #endif
   lj_gc2_smr_read_leave(g);
+  gc2_scan_finreg_udata_nodes(g);
 }
 
 static void lj_gc2_scan_roots(global_State *g, lua_State *L)
@@ -14006,43 +14160,56 @@ int lj_gc2_finreg_udata_set(global_State *g, GCobj *o, int enabled)
 }
 
 static void gc2_finreg_udata_node_publish(global_State *g,
-					  GC2FinRegUDataNode *node)
+					 GC2FinRegUDataNode *node)
 {
   GC2FinRegUDataNode *head;
-  /* The allocating mutator owns node until the active-list CAS. Active-list
-  ** membership, then the unlink/retired-list protocol, owns it afterwards and
-  ** defers physical free until terminal teardown. These marks only close the
-  ** IDLE->MARK clear/root-snapshot race; an ordinary metadata writer must not
-  ** turn that tactical miss into an absorbing reclaim veto. */
+  LJGC2Lease lease = {0};
+  /* The allocation is privately owned until publication. Hold a lease for
+  ** the mark after publication, since a helper can now retire it immediately. */
+  while (!gc2_finreg_udata_lease_try(g, node, &lease))
+    la_cpu_pause();
   (void)lj_gc2_markmem_registered_publish_try(g, node);
+  head = gc2_finreg_udata_head_acq(g);
   do {
-    head = gc2_finreg_udata_head_acq(g);
     gc2_finreg_udata_next_rel(node, head);
   } while (!gc2_finreg_udata_head_cas(g, &head, node));
   /* Close construction-mark versus IDLE->MARK clear/root-snapshot. */
   (void)lj_gc2_markmem_registered_publish_try(g, node);
+  lj_gc2_lease_release(&lease);
 }
 
 static int gc2_finreg_udata_register_nothrow(lua_State *L, global_State *g,
 					      GCobj *o)
 {
+  GC2FinRegUDataWalk walk = {0};
   GC2FinRegUDataNode *node;
   if (!L || !gc2_finreg_udata_obj_valid(g, o))
     return 1;
-  for (node = gc2_finreg_udata_head_acq(g);
-       node != NULL && lj_gc2_mem_registered(g, node);
-       node = gc2_finreg_udata_next_acq(node)) {
-    if (gc2_finreg_udata_active_acq(node) &&
-	gc2_finreg_udata_obj_acq(node) == o)
-      return 1;
+  for (;;) {
+    if (gc2_finreg_udata_walk_start(g, &walk)) {
+      while (walk.node) {
+	if (gc2_finreg_udata_active_acq(walk.node) &&
+	    gc2_finreg_udata_obj_acq(walk.node) == o) {
+	  gc2_finreg_udata_walk_release(&walk);
+	  gc2_finreg_udata_drain(g);
+	  return 1;
+	}
+	if (!gc2_finreg_udata_walk_step(g, &walk))
+	  break;
+      }
+      if (!walk.node)
+	break;
+    }
+    gc2_finreg_udata_walk_release(&walk);
+    la_cpu_pause();
   }
-  node = (GC2FinRegUDataNode *)
-    lj_mem_new_nothrow(L, sizeof(GC2FinRegUDataNode));
+  gc2_finreg_udata_walk_release(&walk);
+  gc2_finreg_udata_drain(g);
+  node = (GC2FinRegUDataNode *)lj_mem_new_nothrow(L, sizeof(*node));
   if (LJ_UNLIKELY(node == NULL))
-    return 0;  /* No registry/FINREG mutation precedes the OOM result. */
+    return 0;  /* No registration for o was published. */
   gc2_finreg_udata_obj_rel(node, o);
   gc2_finreg_udata_retired_next_rel(node, NULL);
-  gc2_finreg_udata_active_rel(node, 1);
   gc2_finreg_udata_node_publish(g, node);
   gc2_finreg_udata_registered_add(g, 1);
   return 1;
@@ -14084,80 +14251,32 @@ void lj_gc2_finreg_udata_register_mt(lua_State *L, global_State *g,
     lj_err_mem(L);
 }
 
-static int gc2_finreg_udata_retire(global_State *g,
-				   GC2FinRegUDataNode *node)
-{
-  GC2FinRegUDataNode *head;
-  if (!g || !node || !lj_gc2_mem_registered(g, node))
-    return 0;
-  /* Retain the raw record before inspecting object or active state. */
-  (void)lj_gc2_markmem(g, node);
-  lj_assertG(gc2_finreg_udata_obj_acq(node) == NULL,
-	     "retiring live userdata FINREG node");
-  if (!gc2_finreg_udata_active_retire(node))
-    return 0;
-  do {
-    head = gc2_finreg_udata_retired_acq(g);
-    gc2_finreg_udata_retired_next_rel(node, head);
-  } while (!gc2_finreg_udata_retired_cas(g, &head, node));
-  (void)lj_gc2_markmem(g, node);
-  gc2_finreg_udata_retired_nodes_add(g, 1);
-  return 1;
-}
-
-static int lj_gc2_finreg_udata_unlink(global_State *g,
-				      GC2FinRegUDataNode *prev,
-				      GC2FinRegUDataNode *node,
-				      GC2FinRegUDataNode *next)
-{
-  GC2FinRegUDataNode *expect;
-  if (!g || !node || !lj_gc2_mem_registered(g, node))
-    return 0;
-  if (!gc2_finreg_udata_retire(g, node))
-    return 1;
-  if (prev) {
-    if (lj_gc2_mem_registered(g, prev)) {
-      expect = node;
-      if (gc2_finreg_udata_active_acq(prev))
-	(void)gc2_finreg_udata_next_cas(prev, &expect, next);
-    }
-  } else {
-    expect = node;
-    (void)gc2_finreg_udata_head_cas(g, &expect, next);
-  }
-  return 1;  /* 05 section 5.8: logical retire plus best-effort CAS unlink. */
-}
-
 void lj_gc2_finreg_udata_forget(global_State *g, GCobj *o)
 {
-  GC2FinRegUDataNode *prev, *node;
+  GC2FinRegUDataWalk walk = {0};
   int cleared = 0;
   if (!gc2_finreg_udata_obj_valid(g, o))
     return;
-  prev = NULL;
-  node = gc2_finreg_udata_head_acq(g);
-  while (node && lj_gc2_mem_registered(g, node)) {
-    GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
-    if (!gc2_finreg_udata_active_acq(node)) {
-      node = next;
-      continue;
-    }
-    if (gc2_finreg_udata_obj_acq(node) == o) {
-      gc2_finreg_udata_obj_clear(node);
-      cleared = 1;
-      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
-	node = next;
-	continue;
+  for (;;) {
+    if (gc2_finreg_udata_walk_start(g, &walk)) {
+      while (walk.node) {
+	if (gc2_finreg_udata_obj_acq(walk.node) == o) {
+	  gc2_finreg_udata_obj_clear(walk.node);
+	  cleared = 1;
+	}
+	if (!gc2_finreg_udata_walk_step(g, &walk))
+	  break;
       }
-      prev = NULL;
-      node = gc2_finreg_udata_head_acq(g);
-      continue;
+      if (!walk.node)
+	break;
     }
-    prev = node;
-    node = next;
+    gc2_finreg_udata_walk_release(&walk);
+    la_cpu_pause();
   }
+  gc2_finreg_udata_walk_release(&walk);
   if (cleared)
     gc2_finreg_udata_forgets_add(g, 1);
+  gc2_finreg_udata_drain(g);
 }
 
 static int gc2_finreg_udata_unlink_root(global_State *g, GCobj *target,
@@ -14211,12 +14330,11 @@ static int gc2_finreg_udata_finalizer_lookup(global_State *g, GCtab *mt,
 }
 
 static void gc2_finreg_udata_finalizer_lookup_retry(
-  global_State *g, GC2FinRegUDataNode *node, GCobj *o)
+  global_State *g, const GC2FinRegUDataWalk *walk, GCobj *o)
 {
-  /* The node is the authoritative retry locator. Retain both it and its
-  ** userdata while reopening the current phase's root certificate; WEAK close
-  ** must observe this as incomplete even when no finalizer was queued. */
-  (void)lj_gc2_markmem(g, node);
+  /* The node is the retry locator. Retain it and its userdata while reopening
+  ** the current phase's root certificate, even if no finalizer was queued. */
+  gc2_finreg_udata_mark_held(g, walk);
   gc2_finreg_queue_mark(g, o);
   gc2_root_scan_retry(g);
 }
@@ -14233,157 +14351,94 @@ static void gc2_finreg_udata_finalizer_enqueue_admitted(
   lj_gc2_finalizer_enqueue_fin(g, o, fin);
 }
 
+static size_t gc2_finreg_udata_discover(global_State *g,
+					GC2FinRegUDataWalk *walk, int all)
+{
+  GC2FinRegUDataNode *node = walk->node;
+  GCobj *o = gc2_finreg_udata_obj_acq(node);
+  GC2MarkScope oscope;
+  TValue mmv;
+  uint32_t gct = 0;
+  int objstatus, marked, lookup_status, finreg;
+  size_t size = 0;
+  if (!o || !gc2_finreg_udata_active_acq(node))
+    return 0;
+  /* The list lease protects the record. Keep a separate admission for the
+  ** userdata through its header/metatable reads and callback publication. */
+  gc2_mark_scope_init(&oscope);
+  objstatus = gc2_observed_obj_status_scoped(g, o, &gct, &oscope);
+  if (LJ_UNLIKELY(objstatus < 0))
+    goto retry;
+  if (objstatus == 0 || gct != (uint32_t)~LJ_TUDATA ||
+      (lj_obj_gcflags(o) & LJ_GC_FINALIZED))
+    goto retire;
+  if (!all) {
+    marked = lj_gc2_ismarked(g, o);
+    if (LJ_UNLIKELY(marked < 0))
+      goto retry;
+    if (marked > 0)
+      goto done;
+  }
+  lookup_status = gc2_finreg_udata_finalizer_lookup(
+    g, lj_udata_metatable_acq(gco2ud(o)), &mmv);
+  if (LJ_UNLIKELY(lookup_status == LJ_TAB_GC_LOOKUP_RETRY))
+    goto retry;
+  finreg = (lj_obj_gcflags(o) & LJ_GC_UDATA_FINREG) != 0;
+  if (lookup_status == LJ_TAB_GC_LOOKUP_ABSENT) {
+    if (finreg)
+      gc2_finreg_udata_set_admitted(g, o, 0);
+    markfinalized(o);  /* Side-list no-finalizer userdata is done. */
+    goto retire;
+  }
+  lj_assertG(lookup_status == LJ_TAB_GC_LOOKUP_FOUND,
+	     "bad userdata finalizer lookup status");
+  if (!finreg)
+    (void)gc2_finreg_udata_set_admitted(g, o, 1);
+  if (gc2_finreg_udata_unlink_root(g, o, all) == LJ_GC_ROOT_UNLINK_UNPROVEN) {
+    /* Keep the registration as a retry locator if the shared unlinker has
+    ** severed a prefix and cannot yet prove ownership of this object. */
+    gc2_finreg_queue_mark(g, o);
+    goto done;
+  }
+  size = sizeudata(gco2ud(o));
+  gc2_finreg_udata_discovered_add(g, 1);
+  gc2_finreg_udata_finalizer_enqueue_admitted(g, o, &mmv);
+retire:
+  gc2_finreg_udata_obj_clear(node);
+done:
+  gc2_mark_scope_leave(&oscope);
+  return size;
+retry:
+  gc2_finreg_udata_finalizer_lookup_retry(g, walk, o);
+  goto done;
+}
+
 size_t lj_gc2_finreg_udata_finalize(global_State *g, int all)
 {
-  GC2FinRegUDataNode *prev, *node;
-  TValue mmv;
-  size_t m = 0;
+  GC2FinRegUDataWalk walk = {0};
+  size_t size = 0;
+  unsigned retry;
   if (!g)
     return 0;
-  /*
-  ** Fresh userdata may still be in the after-main pending-root queue. FINREG
-  ** discovery unlinks finalized userdata from the mainthread chain and later
-  ** requeues it; flush first so the pending queue cannot publish the same
-  ** object again after discovery.
-  */
+  /* Publish pending roots first so a root flush cannot reinsert a userdata
+  ** that we unlinked without going through finalizer dispatch. */
   (void)lj_gc_flush_root_pending(g);
-  prev = NULL;
-  node = gc2_finreg_udata_head_acq(g);
-  while (node && lj_gc2_mem_registered(g, node)) {
-    GC2FinRegUDataNode *next = gc2_finreg_udata_next_acq(node);
-    GCobj *o = gc2_finreg_udata_obj_acq(node);
-    GC2MarkScope oscope;
-    uint32_t gct = 0;
-    uint8_t flags;
-    size_t osize = 0;
-    int finreg, marked, objstatus, unlink_status;
-    if (!gc2_finreg_udata_active_acq(node)) {
-      node = next;
-      continue;
-    }
-    if (!o) {
-      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
-	node = next;
-	continue;
+  for (retry = 0; retry < GC2_FINREG_UDATA_BATCH; retry++) {
+    if (gc2_finreg_udata_walk_start(g, &walk)) {
+      while (walk.node) {
+	size += gc2_finreg_udata_discover(g, &walk, all);
+	if (!gc2_finreg_udata_walk_step(g, &walk))
+	  break;
       }
-      prev = NULL;
-      node = gc2_finreg_udata_head_acq(g);
-      continue;
-    }
-    /* The side-list reference is semantic ownership, but not permission to
-    ** dereference a body between its lifetime LPs. Keep an exact admission
-    ** through every userdata header/metatable read. Overflow/transient
-    ** admission is retryable; only a terminally invalid or wrong-type
-    ** incarnation may retire the node. */
-    gc2_mark_scope_init(&oscope);
-    objstatus = gc2_observed_obj_status_scoped(g, o, &gct, &oscope);
-    if (LJ_UNLIKELY(objstatus < 0)) {
-      gc2_finreg_udata_finalizer_lookup_retry(g, node, o);
-      gc2_mark_scope_leave(&oscope);
-      prev = node;
-      node = next;
-      continue;
-    }
-    if (objstatus == 0 || gct != (uint32_t)~LJ_TUDATA) {
-      gc2_mark_scope_leave(&oscope);
-      gc2_finreg_udata_obj_clear(node);
-      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
-	node = next;
-	continue;
-      }
-      prev = NULL;
-      node = gc2_finreg_udata_head_acq(g);
-      continue;
-    }
-    if (lj_obj_gcflags(o) & LJ_GC_FINALIZED) {
-      gc2_finreg_udata_obj_clear(node);
-      if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
-	gc2_mark_scope_leave(&oscope);
-	node = next;
-	continue;
-      }
-      gc2_mark_scope_leave(&oscope);
-      prev = NULL;
-      node = gc2_finreg_udata_head_acq(g);
-      continue;
-    }
-    if (!all) {
-      marked = lj_gc2_ismarked(g, o);
-      if (LJ_UNLIKELY(marked < 0)) {
-	gc2_finreg_udata_finalizer_lookup_retry(g, node, o);
-	gc2_mark_scope_leave(&oscope);
-	prev = node;
-	node = next;
-	continue;
-      }
-      if (marked > 0) {
-	gc2_mark_scope_leave(&oscope);
-	prev = node;
-	node = next;
-	continue;
+      if (!walk.node) {
+	gc2_finreg_udata_walk_release(&walk);
+	return size;
       }
     }
-    {
-      GCtab *mt = lj_udata_metatable_acq(gco2ud(o));
-      int lookup_status = gc2_finreg_udata_finalizer_lookup(g, mt, &mmv);
-      flags = lj_obj_gcflags(o);
-      finreg = (flags & LJ_GC_UDATA_FINREG) != 0;
-      if (LJ_UNLIKELY(lookup_status == LJ_TAB_GC_LOOKUP_RETRY)) {
-	gc2_finreg_udata_finalizer_lookup_retry(g, node, o);
-	gc2_mark_scope_leave(&oscope);
-	prev = node;
-	node = next;
-	continue;
-      }
-      if (lookup_status == LJ_TAB_GC_LOOKUP_ABSENT) {
-	if (finreg)
-	  gc2_finreg_udata_set_admitted(g, o, 0);
-	markfinalized(o);  /* Side-list no-finalizer userdata is done. */
-	gc2_finreg_udata_obj_clear(node);
-	if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
-	  gc2_mark_scope_leave(&oscope);
-	  node = next;
-	  continue;
-	}
-	gc2_mark_scope_leave(&oscope);
-	prev = NULL;
-	node = gc2_finreg_udata_head_acq(g);
-	continue;
-      }
-      if (!finreg)
-	(void)gc2_finreg_udata_set_admitted(g, o, 1);
-      lj_assertG(lookup_status == LJ_TAB_GC_LOOKUP_FOUND,
-		 "bad userdata finalizer lookup status");
-      osize = sizeudata(gco2ud(o));
-    }
-    /*
-    ** 05 section 5.8: GC2 userdata FINREG identity is enough for
-    ** discovery without userdata-chain membership.
-    */
-    unlink_status = gc2_finreg_udata_unlink_root(g, o, all);
-    if (unlink_status == LJ_GC_ROOT_UNLINK_UNPROVEN) {
-      /* Keep FINREG identity and the side-list node active for a later bounded
-      ** retry. The shared unlinker may have severed an invalid prefix, so make
-      ** the side-list identity a sweep root before leaving o unqueued. */
-      gc2_finreg_queue_mark(g, o);
-      gc2_mark_scope_leave(&oscope);
-      prev = node;
-      node = next;
-      continue;
-    }
-    gc2_finreg_udata_obj_clear(node);
-    gc2_finreg_udata_discovered_add(g, 1);
-    gc2_finreg_udata_finalizer_enqueue_admitted(g, o, &mmv);
-    m += osize;
-    gc2_mark_scope_leave(&oscope);
-    if (lj_gc2_finreg_udata_unlink(g, prev, node, next)) {
-      node = next;
-      continue;
-    }
-    prev = NULL;
-    node = gc2_finreg_udata_head_acq(g);
+    gc2_finreg_udata_walk_release(&walk);
   }
-  return m;  /* 05 section 5.8: GC2-owned userdata FINREG discovery. */
+  gc2_root_scan_retry(g);
+  return size;
 }
 
 static int lj_gc2_finreg_udata_dispatch(lua_State *L, global_State *g,
@@ -23106,6 +23161,8 @@ static uint32_t gc2_worker_drain_inner(global_State *g, TGState *logical_tg,
 uint32_t lj_gc2_worker_drain(global_State *g, uint32_t limit)
 {
   TGState *tg = lj_thr_get_tg();
+  if (g && limit)
+    gc2_finreg_udata_drain(g);
   return gc2_worker_drain_inner(g, tg && tg->gl == g ? tg : NULL,
 					limit, NULL, 0);
 }
@@ -23114,6 +23171,8 @@ static uint32_t gc2_worker_drain_logical(global_State *g, TGState *tg,
 					 uint32_t limit, int hold_mark_gate)
 {
   uint32_t progress = 0;
+  if (!hold_mark_gate)
+    gc2_finreg_udata_drain(g);
   (void)gc2_worker_drain_inner(
     g, tg, limit, &progress, hold_mark_gate);
   return progress;

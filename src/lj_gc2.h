@@ -667,6 +667,17 @@ LJ_FUNC int lj_gc2_test_finreg_cdata_preclaim_take(lua_State *L,
 LJ_FUNC void lj_gc2_test_finreg_udata_queue(global_State *g, GCobj *o);
 LJ_FUNC void lj_gc2_test_finreg_udata_node_publish(
   global_State *g, GC2FinRegUDataNode *node);
+enum {
+  LJ_GC2_FINREG_TEST_FROZEN = 1,
+  LJ_GC2_FINREG_TEST_BEFORE_SPLICE,
+  LJ_GC2_FINREG_TEST_UNLINKED,
+  LJ_GC2_FINREG_TEST_PUBLISHED,
+  LJ_GC2_FINREG_TEST_POPPED
+};
+LJ_FUNC void lj_gc2_test_finreg_udata_pause(GC2FinRegUDataNode *node,
+					 uint32_t stage);
+LJ_FUNC int lj_gc2_test_finreg_udata_paused(void);
+LJ_FUNC void lj_gc2_test_finreg_udata_release(void);
 LJ_FUNC void lj_gc2_test_scan_roots(global_State *g, lua_State *L);
 LJ_FUNC void lj_gc2_test_scan_owned_needscan(global_State *g, lua_State *owner_L);
 LJ_FUNC void lj_gc2_test_scan_minor_roots(global_State *g, lua_State *L);
