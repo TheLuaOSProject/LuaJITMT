@@ -5237,6 +5237,8 @@ static int lj_gc2_finalizer_dispatch_one(lua_State *L,
   GC2FinalizerNode *node;
   GCobj *o;
   TValue fin;
+  TGState *tg;
+  uint8_t entry_flags;
   int has_fin;
   int rc;
   if (!L || !ctx)
@@ -5257,6 +5259,8 @@ static int lj_gc2_finalizer_dispatch_one(lua_State *L,
     lj_state_dropresumeclaim(&claim);
     return 0;
   }
+  tg = L2TG(L);
+  entry_flags = lj_tg_flags_acq(tg);
   rc = gc2_finalizer_dispatch_obj(L, g, o, ctx, has_fin ? &fin : NULL,
                                    node->registration_id);
   if (rc == GC2_FINALIZER_DISPATCH_DEFER) {
@@ -5272,6 +5276,8 @@ static int lj_gc2_finalizer_dispatch_one(lua_State *L,
   gc2_finalizer_dequeue_commit(g, node);
   lj_gc2_finalizer_leave(g);
   lj_state_dropresumeclaim(&claim);
+  if (lj_safepoint_restore_finalizer_stop(tg, entry_flags))
+    return -1;
   return rc < 0 ? -1 : 1;
 }
 

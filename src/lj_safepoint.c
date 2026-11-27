@@ -801,6 +801,29 @@ uint32_t lj_safepoint_ack(lua_State *L)
   return safepoint_ack_l(L, 0);
 }
 
+void lj_safepoint_ack_unwind(lua_State *L)
+{
+  LJOSerrState oserr;
+  /* The protected frame has already unwound. Preserve its error or yield and
+  ** leave a new interrupt armed for the next live owner boundary. */
+  lj_oserr_save(&oserr);
+  (void)safepoint_ack_l(L, 0);
+  lj_oserr_restore(&oserr);
+}
+
+int lj_safepoint_restore_finalizer_stop(TGState *tg, uint8_t entry_flags)
+{
+  const uint8_t mask = TGF_STOPREQ|TGF_STOPREQ_FRESH;
+  /* A finalizer runs on the collecting worker's stack. Its internal pcall
+  ** can catch the shutdown interrupt meant for the interrupted Lua program. */
+  if ((entry_flags & mask) == TGF_STOPREQ || !mt_shutdown_acq(tg->gl) ||
+      tg == tg->gl->main_tg || (lj_tg_flags_acq(tg) & mask) != TGF_STOPREQ)
+    return 0;
+  lj_tg_flags_or_rlx(tg, TGF_STOPREQ_FRESH);
+  safepoint_rearm_fresh_stopreq_poll(tg);
+  return 1;
+}
+
 uint32_t lj_safepoint_poll(lua_State *L)
 {
   if (!L)
@@ -825,7 +848,7 @@ uint32_t lj_safepoint_poll_tg(TGState *tg)
   return safepoint_ack_tg(tg->gl, tg, 1, 1, 0, 0, NULL);
 }
 
-void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
+static void safepoint_checkstop(lua_State *L, uint32_t actions, ptrdiff_t ftsz)
 {
   TGState *tg;
   if (!L)
@@ -848,18 +871,47 @@ void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
       safepoint_consume_fresh_stopreq_poll(tg);
       lj_oserr_restore(&oserr);
     }
+    if (ftsz) {
+      /* A returning fast function may have used both of its header slots
+      ** for results. Recreate a dummy frame only on the throwing edge, at
+      ** the exact position and with the protection of the completed call. */
+      TValue *base = (TValue *)((char *)L->base + (ftsz & ~FRAME_TYPEP));
+      setframe_gc(base-1-LJ_FR2, obj2gco(L), LJ_TTHREAD);
+      setframe_ftsz(base-1, ftsz);
+      L->base = L->top = base;
+    }
     lj_err_callermsg(L, "thread interrupted: VM shutdown");
   }
+}
+
+void lj_safepoint_checkstop(lua_State *L, uint32_t actions)
+{
+  safepoint_checkstop(L, actions, 0);
+}
+
+void lj_safepoint_ack_return(lua_State *L, ptrdiff_t ftsz)
+{
+  LJOSerrState oserr;
+  void *cf = L->cframe;
+  uint32_t actions;
+  /* BASE and TOP already describe the caller and its adjusted results.
+  ** Walk that same frame chain during ACK. The original catch must be back
+  ** in place before a shutdown interrupt can leave this VM invocation. */
+  lj_oserr_save(&oserr);
+  L->cframe = cframe_prev(cframe_raw(cf));
+  actions = safepoint_ack_l(L, 0);
+  L->cframe = cf;
+  lj_oserr_restore(&oserr);
+  safepoint_checkstop(L, actions, ftsz);
+  lj_oserr_restore(&oserr);
 }
 
 static uint32_t safepoint_ack_check_l(lua_State *L, int vm_frame)
 {
   LJOSerrState oserr;
   uint32_t actions;
-  /* VM external-unwind landings reach this helper immediately after their
-  ** authoritative errno/LastError restore. ACK bookkeeping is observational
-  ** and must not replace the error-edge pair, including immediately before a
-  ** STOPREQ throws again. */
+  /* ACK bookkeeping preserves errno/LastError, including on a throwing
+  ** shutdown poll. */
   lj_oserr_save(&oserr);
   actions = safepoint_ack_l(L, vm_frame);
   lj_oserr_restore(&oserr);

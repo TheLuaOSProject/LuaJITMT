@@ -383,7 +383,7 @@ return function(add)
 
   add({
     name = "m4_threading_shutdown",
-    description = "VM shutdown interrupts unjoined parked and CPU-bound threads",
+    description = "VM shutdown interrupts parked threads, active loops and finalizer returns",
     run = function(t)
       with_temp_paths(t, { "m4-shutdown", "m4-shutdown-spin" },
         function(marker, spin_marker)
@@ -405,6 +405,10 @@ return function(add)
                                           "marker text")
           end
         end)
+      if jit.os == "Linux" and jit.arch == "x64" then
+        build.compile_and_run_c(t, t:tmp("t-vm-return-shutdown"),
+                                "t-vm-return-shutdown.c", { timeout = "55s" })
+      end
     end
   })
 

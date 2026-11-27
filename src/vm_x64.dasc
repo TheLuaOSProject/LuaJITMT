@@ -654,6 +654,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  jnz ->vm_returnp
   |
   |  // Return to C.
+  |  lea KBASE, [PC+FRAME_C]		// Keep the original frame delta and type across result adjustment.
   |  set_vmstate C
   |  and PC, -8
   |  sub PC, BASE
@@ -681,14 +682,14 @@ static void build_subroutines(BuildCtx *ctx)
   |5:
   |  sub BASE, 16
   |  mov L:RB->top, BASE
-  |
-  |->vm_leave_cp:
   |  cmp TGPOLL, 0
-  |  jz >9
-  |  mov SAVE_PC, L:RB			// Outside bytecode while returning to C.
+  |  jz ->vm_leave_ok
+  |  mov SAVE_PC, L:RB
+  |  mov CARG2, KBASE
   |  mov CARG1, L:RB
-  |  call extern lj_safepoint_ack_check
-  |9:
+  |  call extern lj_safepoint_ack_return
+  |
+  |->vm_leave_ok:
   |  mov RA, SAVE_CFRAME		// Restore previous C frame.
   |  mov L:RB->cframe, RA
   |  xor eax, eax			// Ok return status for vm_pcall.
@@ -849,7 +850,7 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov SAVE_ERRF, eax
   |  mov SAVE_PC, L:RB			// Outside bytecode while unwinding to C.
   |  mov CARG1, L:RB
-  |  call extern lj_safepoint_ack_check
+  |  call extern lj_safepoint_ack_unwind
   |  mov eax, SAVE_ERRF
   |  mov L:RB, SAVE_L
   |9:
@@ -1041,6 +1042,13 @@ static void build_subroutines(BuildCtx *ctx)
   |  mov RA, RC
   |  mov PCd, FRAME_CP
   |  jmp <2				// Else continue with the call.
+  |->vm_leave_cp:			// C-only callback has a negative-nres catch frame.
+  |  cmp TGPOLL, 0
+  |  jz ->vm_leave_ok
+  |  mov SAVE_PC, L:RB
+  |  mov CARG1, L:RB
+  |  call extern lj_safepoint_ack_check
+  |  jmp ->vm_leave_ok
   |
   |//-----------------------------------------------------------------------
   |//-- Metamethod handling ------------------------------------------------

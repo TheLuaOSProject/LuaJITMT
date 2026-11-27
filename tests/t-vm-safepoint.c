@@ -426,6 +426,97 @@ static void assert_acked(global_State *g, TGState *tg, uint64_t epoch0)
   assert(tg->reqmask == 0);
 }
 
+#if LJ_TARGET_X64 && LJ_TARGET_LINUX
+static int stop_on_return(lua_State *L)
+{
+  lua_pushinteger(L, 31);
+  lua_pushinteger(L, 47);
+  publish_manual(G(L), L2TG(L), LJ_GC2_HS_STOPREQ);
+  return 2;
+}
+
+static int call_without_handler(lua_State *L)
+{
+  int wanted = (int)lua_tointeger(L, 1);
+  lua_pushcfunction(L, stop_on_return);
+  lua_call(L, 0, wanted);
+  assert(0 && "interrupted lua_call returned");
+  return 0;
+}
+
+static int primary_error(lua_State *L)
+{
+  lua_pushliteral(L, "primary error");
+  publish_manual(G(L), L2TG(L), LJ_GC2_HS_STOPREQ);
+  return lua_error(L);
+}
+
+static int primary_yield(lua_State *L)
+{
+  lua_pushinteger(L, 53);
+  publish_manual(G(L), L2TG(L), LJ_GC2_HS_STOPREQ);
+  return lua_yield(L, 1);
+}
+
+static void expect_return_stop(lua_State *L, int nargs, int wanted)
+{
+  TGState *tg = L2TG(L);
+  int top = lua_gettop(L) - nargs;
+  assert(lua_pcall(L, nargs, wanted, 0) == LUA_ERRRUN);
+  assert(lua_gettop(L) == top);
+  assert(strstr(lua_tostring(L, -1), "thread interrupted: VM shutdown"));
+  lua_pop(L, 1);
+  assert(lj_tg_flags_test_acq(tg, TGF_STOPREQ));
+  assert(!lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH));
+  assert(lj_tg_poll_acq(tg) == 0);
+  lj_tg_flags_and_rlx(tg, (uint8_t)~TGF_STOPREQ);
+}
+
+static void check_return_interrupts(lua_State *L)
+{
+  static const int widths[] = { 0, 1, 5, LUA_MULTRET };
+  lua_State *co;
+  unsigned i;
+  lua_pushliteral(L, "outer guard");
+  for (i = 0; i < sizeof(widths)/sizeof(widths[0]); i++) {
+    lua_pushcfunction(L, stop_on_return);
+    expect_return_stop(L, 0, widths[i]);
+    lua_pushcfunction(L, call_without_handler);
+    lua_pushinteger(L, widths[i]);
+    expect_return_stop(L, 1, LUA_MULTRET);
+  }
+
+  /* math.abs returns in its function slot. Deliver an interrupt on this
+  ** exact fast return after the preceding error and yield keep it armed. */
+  lua_getglobal(L, "math");
+  lua_getfield(L, -1, "abs");
+  lua_remove(L, -2);
+  lua_pushinteger(L, -109);
+  lua_pushcfunction(L, primary_error);
+  assert(lua_pcall(L, 0, 0, 0) == LUA_ERRRUN);
+  assert(strcmp(lua_tostring(L, -1), "primary error") == 0);
+  lua_pop(L, 1);
+  assert(lj_tg_flags_test_acq(L2TG(L), TGF_STOPREQ_FRESH));
+  expect_return_stop(L, 1, 1);
+
+  co = lua_newthread(L);
+  lua_getglobal(L, "math");
+  lua_getfield(L, -1, "abs");
+  lua_remove(L, -2);
+  lua_pushinteger(L, -113);
+  lua_pushcfunction(co, primary_yield);
+  assert(lua_resume(co, 0) == LUA_YIELD);
+  assert(lua_gettop(co) == 1 && lua_tointeger(co, -1) == 53);
+  assert(lj_tg_flags_test_acq(L2TG(L), TGF_STOPREQ_FRESH));
+  expect_return_stop(L, 1, LUA_MULTRET);
+  lua_settop(co, 0);
+  assert(lua_resume(co, 0) == LUA_OK);
+  lua_pop(L, 1);  /* Coroutine. */
+  assert(lua_gettop(L) == 1 && strcmp(lua_tostring(L, 1), "outer guard") == 0);
+  lua_pop(L, 1);
+}
+#endif
+
 #if LJ_HASJIT && !LJ_ARM64_JIT_ROOT_RECORDER_FAIL_CLOSED && \
     !LJ_ARM64_JIT_LOOP_NATIVE_ENTRY_FAIL_CLOSED && \
     !LJ_ARM64_JIT_JFUNCF_NATIVE_ENTRY_FAIL_CLOSED
@@ -552,6 +643,9 @@ int main(void)
 
   lua_gc(L, LUA_GCSTOP, 0);
   luaL_openlibs(L);
+#if LJ_TARGET_X64 && LJ_TARGET_LINUX
+  check_return_interrupts(L);
+#endif
   lua_pushcfunction(L, publish_poll_c);
   lua_setglobal(L, "publish_poll");
   lua_pushcfunction(L, assert_pending_c);

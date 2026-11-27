@@ -11,6 +11,9 @@
 #include "lj_tg.h"
 
 LJ_FUNCA uint32_t lj_safepoint_ack(lua_State *L);
+LJ_FUNCA void lj_safepoint_ack_return(lua_State *L, ptrdiff_t ftsz);
+LJ_FUNCA void lj_safepoint_ack_unwind(lua_State *L);
+LJ_FUNC int lj_safepoint_restore_finalizer_stop(TGState *tg, uint8_t entry_flags);
 LJ_FUNCA uint32_t lj_safepoint_ack_check(lua_State *L);
 LJ_FUNCA uint32_t lj_safepoint_poll(lua_State *L);
 LJ_FUNC uint32_t lj_safepoint_poll_tg(TGState *tg);
