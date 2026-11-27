@@ -83,7 +83,6 @@ static LJ_AINLINE uint32_t lj_arena_binmask_from_ncells(uint32_t ncells)
 }
 
 typedef struct GCArena GCArena;
-typedef struct GreyStack GreyStack;
 typedef struct LJArenaFreeRun LJArenaFreeRun;
 typedef struct LJArenaBump LJArenaBump;
 typedef struct LJArenaAllocD LJArenaAllocD;
@@ -165,7 +164,7 @@ typedef struct GCAhdr {
   uint32_t flags;
   uint32_t owner_tid;
   GCArena *next;
-  GreyStack *grey;
+  uint32_t *plain_free_wake;  /* Stable TG slot, sampled under admission. */
   union {
     struct {
       uint32_t sweep_epoch;
@@ -1086,6 +1085,7 @@ LJ_FUNC void lj_arena_alloc_unmap_dead_empty(TGAlloc *alloc, GCArena *a);
 LJ_FUNC int lj_arena_alloc_trim_dead_plain(TGAlloc *alloc, GCArena *prev,
 					 GCArena *a);
 LJ_FUNC uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src);
+LJ_FUNC void lj_arena_alloc_bind_plain_free_wake(TGAlloc *alloc);
 LJ_FUNC int lj_arena_reserve_bump(TGAlloc *alloc, PRNGState *rs,
 				  uint32_t flags, uint32_t ncells,
 				  GCArena **ap, uint32_t *cellp);
@@ -1111,6 +1111,9 @@ LJ_FUNC int lj_arena_free_deferred(TGAlloc *alloc, void *p, size_t size);
 LJ_FUNC void lj_arena_free(TGAlloc *alloc, void *p, size_t size);
 LJ_FUNC int lj_arena_remote_free_publish(TGAlloc *alloc, void *p,
 					 size_t size);
+/* Publish foreign free intent via the plain arena's stable owner wake.
+** The caller owns the live allocation; zero requests legacy routing. */
+LJ_FUNC int lj_arena_remote_plain_free(void *p, size_t size);
 /* Owner/ownership-transfer drain for intrusive queues and explicit plain late
 ** frees. The forced form scans owned[] even when the advisory wake is clear;
 ** GC owner checkpoints and transfer use it to cover parameterless cold APIs. */

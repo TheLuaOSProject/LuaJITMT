@@ -33,6 +33,7 @@ struct LJTGRegistrySlot {
   /* lo = body pointer, hi = the exact incarnation which owns that pointer. */
   la_u128 body_value;
   LJTGRegistrySlot *next_all;   /* Immutable after registry publication. */
+  uint32_t plain_free_pending;  /* Owner wake independent of the TG body. */
 };
 
 typedef struct LJTGRegistryKey {
@@ -183,6 +184,7 @@ lj_tgregistry_slot_init_unpublished(LJTGRegistrySlot *slot,
     return 0;
   lj_tgregistry_body_init_unpublished(slot, NULL, empty_incarnation);
   slot->next_all = next_all;
+  slot->plain_free_pending = 0;
   return 1;
 }
 

@@ -11,6 +11,7 @@
 #include "lj_arch.h"
 #include "lj_arena.h"
 #include "lj_prng.h"
+#include "lj_tg.h"
 
 #define RACE_PUBLISHERS 8u
 
@@ -34,6 +35,13 @@ static void *publish_one(void *ud)
 {
   RemoteWork *w = (RemoteWork *)ud;
   w->result = lj_arena_remote_free_publish(w->alloc, w->p, 64u);
+  return NULL;
+}
+
+static void *publish_routed_plain(void *ud)
+{
+  RemoteWork *w = (RemoteWork *)ud;
+  w->result = lj_arena_remote_plain_free(w->p, 64u);
   return NULL;
 }
 
@@ -312,6 +320,63 @@ static void test_force_transfer_sweep_terminal(PRNGState *rs)
   lj_arena_alloc_fini(&terminal);
 }
 
+static void test_routed_plain_wake(PRNGState *rs)
+{
+  TGState src = {0}, dst = {0};
+  LJTGRegistrySlot src_slot, dst_slot;
+  RemoteWork work = {0};
+  pthread_t publisher;
+  GCArena *arena;
+  void *retained, *independent;
+  uint32_t cell;
+
+  assert(lj_tgregistry_slot_init_unpublished(&src_slot, 0, NULL));
+  assert(lj_tgregistry_slot_init_unpublished(&dst_slot, 0, NULL));
+  src.registry_key.slot = &src_slot;
+  dst.registry_key.slot = &dst_slot;
+  lj_arena_alloc_init(&src.alloc);
+  lj_arena_alloc_init(&dst.alloc);
+  lj_arena_alloc_owner_rel(&src.alloc, 0x1001u);
+  lj_arena_alloc_owner_rel(&dst.alloc, 0x2002u);
+  lj_arena_alloc_owner_tg_rel(&src.alloc, &src);
+  lj_arena_alloc_owner_tg_rel(&dst.alloc, &dst);
+  work.p = lj_arena_alloc(&src.alloc, rs, 64u, 0);
+  retained = lj_arena_alloc(&src.alloc, rs, 64u, 0);
+  independent = lj_arena_alloc(&dst.alloc, rs, 64u, 0);
+  assert(work.p && retained && independent);
+  arena = lj_arena_of(work.p);
+  cell = lj_arena_cellof(work.p);
+  assert(lj_arena_of(retained) == arena);
+
+  lj_arena_test_plain_admit_pause(1);
+  assert(pthread_create(&publisher, NULL, publish_routed_plain, &work) == 0);
+  wait_seen(lj_arena_test_plain_admit_paused);
+  assert(la_load32_acq(&src_slot.plain_free_pending) == 0);
+  assert(lj_arena_remote_free_drain_force(&src.alloc) == 0);
+  assert(lj_arena_bm_get(arena->block, cell));
+  assert(lj_arena_remote_free_publish(&dst.alloc, independent, 64u));
+  assert(lj_arena_remote_free_drain(&dst.alloc) == 1);
+  lj_arena_test_plain_admit_pause(0);
+  assert(pthread_join(publisher, NULL) == 0 && work.result == 1);
+
+  assert(lj_arena_late_get(arena, cell));
+  assert(la_load32_acq(&src_slot.plain_free_pending) == 1);
+  assert(lj_arena_rescue_enter(arena) == LJ_ARENA_RESCUE_FULL);
+  assert(lj_arena_remote_free_drain(&src.alloc) == 0);
+  lj_arena_rescue_leave(arena);
+  assert(lj_arena_remote_free_drain(&src.alloc) == 1);
+  assert(!lj_arena_bm_get(arena->block, cell));
+
+  assert(lj_arena_alloc_transfer(&dst.alloc, &src.alloc) == 1);
+  assert(lj_arena_owner_acq(arena) == lj_arena_alloc_owner_acq(&dst.alloc));
+  assert(lj_arena_remote_plain_free(retained, 64u));
+  assert(la_load32_acq(&src_slot.plain_free_pending) == 0);
+  assert(la_load32_acq(&dst_slot.plain_free_pending) == 1);
+  assert(lj_arena_remote_free_drain(&dst.alloc) == 1);
+  lj_arena_alloc_fini(&src.alloc);
+  lj_arena_alloc_fini(&dst.alloc);
+}
+
 int main(void)
 {
   PRNGState rs;
@@ -323,6 +388,7 @@ int main(void)
   test_blocked_scan_rearms(&rs);
   test_multi_publisher_no_drop(&rs);
   test_force_transfer_sweep_terminal(&rs);
+  test_routed_plain_wake(&rs);
   printf("t-arena-remote-pending OK: empty scans elided, races and force drains preserve frees\n");
   return 0;
 }

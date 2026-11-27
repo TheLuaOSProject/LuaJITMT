@@ -6027,6 +6027,19 @@ void lj_mem_free(global_State *g, void *p, size_t osize)
 {
   lj_gc_total_sub(g, (GCSize)osize);
   if (g->allocf == lj_arena_allocf) {
+    if (p && osize && osize <= LJ_HUGE_THRESHOLD) {
+      GCArena *a = lj_arena_of(p);
+      TGState *self = lj_thr_get_tg();
+      if (self && self->gl == g &&
+	  lj_tg_tid_acq(self) != lj_arena_owner_acq(a) &&
+	  mt_shutdown_acq(g) == 0) {
+	uint32_t flags = lj_arena_flags_acq(a);
+	if (!(flags & LJ_AF_TRAVERSABLE) &&
+	    (flags & LJ_AF_HUGE_MAGIC) != LJ_AF_HUGE_MAGIC &&
+	    lj_arena_remote_plain_free(p, osize))
+	  return;
+      }
+    }
     LJArenaAllocD *ad = gc_arena_allocd_for_ptr(g, p);
     (void)lj_arena_allocf(ad, p, osize, 0);
   } else {

@@ -196,6 +196,28 @@ static void arena_progress_bind_rel(GCArena *a, global_State *g)
     lj_arena_progress_g_rel(a, g);
 }
 
+static uint32_t *arena_alloc_plain_free_wake(const TGAlloc *alloc)
+{
+  TGState *tg = (TGState *)lj_arena_alloc_owner_tg_acq(alloc);
+  LJTGRegistrySlot *slot = tg ? tg->registry_key.slot : NULL;
+  return slot ? &slot->plain_free_pending : NULL;
+}
+
+static void arena_plain_free_wake_rel(GCArena *a, uint32_t *wake)
+{
+  la_storeptr_rel((void **)&a->hdr.plain_free_wake, wake);
+}
+
+void lj_arena_alloc_bind_plain_free_wake(TGAlloc *alloc)
+{
+  uint32_t *wake = arena_alloc_plain_free_wake(alloc);
+  GCArena *a;
+  /* Attachment can follow allocation of bootstrap storage. This owner still
+  ** controls the list while publishing its first stable wake. */
+  for (a = alloc->owned[LJ_ARENAK_PLAIN]; a; a = lj_arena_next_acq(a))
+    arena_plain_free_wake_rel(a, wake);
+}
+
 static void arena_progress_wake(GCArena *a)
 {
   global_State *g = a ? (global_State *)lj_arena_progress_g_acq(a) : NULL;
@@ -6149,19 +6171,17 @@ static int arena_late_pin(TGAlloc *alloc, GCArena *a,
 ** the current generation is OPEN, tentative, committed or completed. This is
 ** the fallback for owner-local operations whose initial writer CAS lost; the
 ** bit is always visible before this admission can be the last leave/open. */
-static int arena_plain_late_pin_admitted(TGAlloc *alloc, GCArena *a,
-                                        const void *p, size_t size)
+static int arena_plain_late_admit(GCArena *a)
 {
   uint64_t active;
-  int published;
   if (!a || arena_lifetime_managed(a))
-    return -1;
+    return 0;
   active = lj_arena_remote_active_acq(a);
   for (;;) {
     uint64_t expect = active;
     uint64_t next;
     if (arena_terminal_closed_acq(a))
-      return -1;
+      return 0;
     if (arena_remote_count(active) == LJ_ARENA_REMOTE_COUNT_MASK)
       arena_remote_overflow();
     next = active + 1u;
@@ -6170,13 +6190,41 @@ static int arena_plain_late_pin_admitted(TGAlloc *alloc, GCArena *a,
     if (la_cas64(&a->hdr.remote_active, &expect, next,
 		 LA_ACQ_REL, LA_ACQ)) {
       arena_test_plain_admit_pause_after_enter();
-      break;
+      return 1;
     }
     active = expect;
   }
+}
+
+static int arena_plain_late_pin_admitted(TGAlloc *alloc, GCArena *a,
+                                        const void *p, size_t size)
+{
+  int published;
+  if (!arena_plain_late_admit(a))
+    return -1;
   published = arena_late_pin(alloc, a, p, size);
   arena_remote_late_leave(a);
   return published;
+}
+
+int lj_arena_remote_plain_free(void *p, size_t size)
+{
+  GCArena *a;
+  uint32_t *wake;
+  if (!p || !size || size > LJ_HUGE_THRESHOLD)
+    return 0;
+  a = lj_arena_of(p);
+  if (!la_loadptr_acq((void *const *)&a->hdr.plain_free_wake) ||
+      !arena_plain_late_admit(a))
+    return 0;
+  wake = (uint32_t *)la_loadptr_acq((void *const *)&a->hdr.plain_free_wake);
+  if (wake && arena_late_pin(NULL, a, p, size) == 1)
+    la_store32_rel(wake, 1);
+  /* The bitmap is durable work. A drain crossing this admission must rearm
+  ** its wake if it cannot consume the bit. The slot outlives its TG body.
+  ** Ownership transfer must finish this admission before redirecting wakes. */
+  arena_remote_late_leave(a);
+  return wake != NULL;
 }
 
 /* Publish irrevocable external-free provenance with release ordering. Return
@@ -6759,7 +6807,8 @@ uint32_t lj_arena_remote_free_drain_sweep(TGAlloc *alloc, GCArena *a)
 
 static uint32_t arena_remote_free_drain_all(TGAlloc *alloc, int force)
 {
-  uint32_t k, n = 0;
+  uint32_t k, pending, n = 0;
+  uint32_t *wake;
   if (!alloc)
     return 0;
   /* Queue producers release their arena admission before release-publishing
@@ -6767,8 +6816,14 @@ static uint32_t arena_remote_free_drain_all(TGAlloc *alloc, int force)
   ** both publications. Clearing first is intentional: a producer after the
   ** clear leaves 1 for the next opportunistic drain, whether or not this scan
   ** happens to consume its queue record. A producer paused between its queue
-  ** CAS and flag store likewise guarantees a subsequent drain. */
-  if (lj_arena_remote_pending_xchg_acqrel(alloc, 0) == 0 && !force) {
+  ** CAS and flag store likewise guarantees a subsequent drain. The stable
+  ** PLAIN wake instead follows a late bit published under admission. A drain
+  ** that samples it before the last admission leaves rearms remote_pending. */
+  pending = lj_arena_remote_pending_xchg_acqrel(alloc, 0);
+  wake = arena_alloc_plain_free_wake(alloc);
+  if (wake)
+    pending |= la_xchg32_acqrel(wake, 0);
+  if (!pending && !force) {
     arena_test_remote_fast_skip();
     return 0;
   }
@@ -8699,7 +8754,8 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
 }
 
 static uint32_t arena_transfer_list(GCArena **dstp, GCArena *a,
-				    uint32_t owner_tid, global_State *progress_g)
+				    uint32_t owner_tid, global_State *progress_g,
+				    uint32_t *plain_free_wake)
 {
   uint32_t n = 0;
   while (a) {
@@ -8707,6 +8763,7 @@ static uint32_t arena_transfer_list(GCArena **dstp, GCArena *a,
     arena_empty_reclaimed_forget(a);
     lj_arena_owner_rel(a, owner_tid);
     arena_progress_bind_rel(a, progress_g);
+    arena_plain_free_wake_rel(a, plain_free_wake);
     lj_arena_next_rel(a, *dstp);
     *dstp = a;
     a = next;
@@ -8739,6 +8796,8 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
   progress_g = owner_tg ? owner_tg->gl : NULL;
   for (k = 0; k < LJ_ARENA_NKINDS; k++) {
     LJArenaBump *b = &src->bump[k];
+    uint32_t *plain_free_wake = k == LJ_ARENAK_PLAIN ?
+      arena_alloc_plain_free_wake(dst) : NULL;
     uint32_t moved;
     if (b->a && b->cell < b->end &&
         !arena_set_free_run(b->a, b->cell, b->end - b->cell))
@@ -8750,19 +8809,19 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
     src->bump[k].end = 0;
     arena_clear_bins(src, k);
     moved = arena_transfer_list(&dst->owned[k], src->owned[k], owner_tid,
-				progress_g);
+				progress_g, plain_free_wake);
     arena_list_count_add(&dst->owned_count[k], moved);
     n += moved;
     src->owned[k] = NULL;
     la_store32_rel(&src->owned_count[k], 0);
     moved = arena_transfer_list(&dst->needsweep[k], src->needsweep[k],
-				owner_tid, progress_g);
+				owner_tid, progress_g, plain_free_wake);
     arena_list_count_add(&dst->needsweep_count[k], moved);
     n += moved;
     src->needsweep[k] = NULL;
     la_store32_rel(&src->needsweep_count[k], 0);
     n += arena_transfer_list(&dst->quarantine[k], src->quarantine[k],
-			     owner_tid, progress_g);
+			     owner_tid, progress_g, plain_free_wake);
     src->quarantine[k] = NULL;
     {
       GCArena *a = (GCArena *)la_xchgptr_acqrel(
@@ -8772,6 +8831,7 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
 	arena_empty_reclaimed_forget(a);
 	lj_arena_owner_rel(a, owner_tid);
 	arena_progress_bind_rel(a, progress_g);
+	arena_plain_free_wake_rel(a, plain_free_wake);
 	arena_reclaimed_push(dst, k, a, 0);
 	a = next;
 	n++;
@@ -8809,6 +8869,8 @@ static GCArena *arena_alloc_fresh(TGAlloc *alloc, PRNGState *rs,
   if (!a)
     return NULL;
   lj_arena_owner_rel(a, lj_arena_alloc_owner_acq(alloc));
+  if (k == LJ_ARENAK_PLAIN)
+    arena_plain_free_wake_rel(a, arena_alloc_plain_free_wake(alloc));
   {
     TGState *owner_tg = (TGState *)lj_arena_alloc_owner_tg_acq(alloc);
     arena_progress_bind_rel(a, owner_tg ? owner_tg->gl : NULL);

@@ -643,6 +643,8 @@ static int tg_registry_link_attaching(global_State *g, TGState *tg)
       lj_tgregistry_try_publish_body(&key, tg, &snap) != LJ_TGSLOT_OK)
     tg_registry_attach_corrupt(slot);
   tg->registry_key = key;
+  if (lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL))
+    lj_arena_alloc_bind_plain_free_wake(&tg->alloc);
   /* A legacy-only missed attach may retry idempotently. Clear its per-body
   ** exception before the stable head release makes this slot discoverable. */
   lj_tg_registry_shadow_missed_rel(tg, 0);

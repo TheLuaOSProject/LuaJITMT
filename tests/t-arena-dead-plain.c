@@ -68,6 +68,7 @@ static int hold_late(lua_State *L)
   assert(lj_gc2_small_lease_try(g, late_block, BlockSize, 0,
     &body_reader, NULL));
   lj_mem_free(g, late_block, BlockSize);
+  assert(la_load32_acq(&dead->registry_key.slot->plain_free_pending) == 1);
   assert(lj_arena_late_get(late_arena, lj_arena_cellof(late_block)));
   return 0;
 }
