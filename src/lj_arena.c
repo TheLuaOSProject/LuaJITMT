@@ -5969,7 +5969,7 @@ static LJ_AINLINE void arena_binmask_publish(TGAlloc *alloc, uint32_t kind,
 static int arena_link_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
 			       uint32_t len)
 {
-  uint32_t k = arena_kind(a->hdr.flags);
+  uint32_t k = arena_kind(lj_arena_flags_acq(a));
   uint32_t b = arena_bin(len);
   LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
   if (!arena_side_owners_none(a, start) ||
@@ -6075,7 +6075,7 @@ static LJ_AINLINE int arena_bin_walk_cycle(ArenaBinWalk *walk,
 static int arena_insert_run(TGAlloc *alloc, GCArena *a, uint32_t start,
                             uint32_t len)
 {
-  uint32_t k = arena_kind(a->hdr.flags);
+  uint32_t k = arena_kind(lj_arena_flags_acq(a));
   uint32_t b = arena_bin(len);
   LJArenaFreeRun *run = (LJArenaFreeRun *)lj_arena_cellptr(a, start);
   LJArenaFreeRun **pp = &alloc->bins[k][b];
@@ -7561,7 +7561,7 @@ int lj_arena_alloc_trim_dead_plain(TGAlloc *alloc, GCArena *prev, GCArena *a)
 static int arena_register_list(TGAlloc *alloc, GCArena *a)
 {
   for (; a != NULL; a = lj_arena_next_acq(a))
-    if (!arena_registry_insert_existing(alloc, a, a->hdr.flags))
+    if (!arena_registry_insert_existing(alloc, a, lj_arena_flags_acq(a)))
       return 0;
   return 1;
 }
@@ -8692,7 +8692,7 @@ static void arena_unlink_owned_duplicate(TGAlloc *alloc, uint32_t kind,
   for (a = alloc->owned[kind]; a != NULL;) {
     GCArena *next = lj_arena_next_acq(a);
     if (a == target) {
-      if (next == a || (next && (next->hdr.flags & LJ_AF_NEEDSWEEP)))
+      if (next == a || (next && (lj_arena_flags_acq(next) & LJ_AF_NEEDSWEEP)))
 	next = NULL;
       if (prev)
 	lj_arena_next_rel(prev, next);
@@ -8726,7 +8726,7 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   arena_unlink_owned_duplicate(alloc, kind, a);
   {
     GCArena *next = lj_arena_next_acq(a);
-    if (next == a || (next && !(next->hdr.flags & LJ_AF_NEEDSWEEP)))
+    if (next == a || (next && !(lj_arena_flags_acq(next) & LJ_AF_NEEDSWEEP)))
       next = NULL;
     alloc->needsweep[kind] = next;
     arena_list_count_pop(&alloc->needsweep_count[kind], next);
@@ -8751,7 +8751,8 @@ GCArena *lj_arena_sweep_one(TGAlloc *alloc, uint32_t kind, uint32_t epoch,
   }
   a->hdr.live_cells = arena_count_live_cells(a);
   a->hdr.sweep_epoch = epoch;
-  a->hdr.flags &= ~LJ_AF_NEEDSWEEP;
+  /* Publish completed sweep metadata to concurrent header readers. */
+  (void)la_and32_rel(&a->hdr.flags, ~LJ_AF_NEEDSWEEP);
   lj_arena_next_rel(a, alloc->owned[kind]);
   alloc->owned[kind] = a;
   arena_list_count_add(&alloc->owned_count[kind], 1u);

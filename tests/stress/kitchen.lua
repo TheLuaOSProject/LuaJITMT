@@ -141,6 +141,13 @@ repeat
   if previous then check_finalizers(previous) end
   previous = receipts
 until (seconds > 0 and th.now() >= deadline) or (seconds <= 0 and tick >= batches)
+if os.getenv("LJ_MT_SOAK_SHUTDOWN") == "1" then
+  -- Keep the workers and their latest finalizers live when the host closes.
+  -- Competing collection requests may leave finalization to another mutator.
+  for _ = 1, 8 do collectgarbage() end
+  print(("closing with %d workers after %d verified batches"):format(count, tick))
+  return
+end
 for id = 1, count do assert(inboxes[id]:send(false)) end
 for id = 1, count do assert(workers[id]:join()) end
 if pressure then

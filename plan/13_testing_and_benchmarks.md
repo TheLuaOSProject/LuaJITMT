@@ -77,6 +77,10 @@ full collections until the workload joins. Enable this in either mode with
 complete while another collector can own the cycle. For a longer run use
 `LJ_MT_SOAK_SECONDS=3600 src/luajit -jon tests/stress/kitchen.lua 1 4 2 19`.
 The last three arguments select mutators, background collectors and seed.
+Set `LJ_MT_SOAK_SHUTDOWN=1` to end the script with its workers still alive.
+The host then closes the state while channel receivers and a collecting
+mutator may still need their shutdown interrupts. The joined version checks
+the final batch's exact finalizer counts after all workers have exited.
 
 Coroutine×thread matrix: t-co-01 resume/yield storms while markers scan
 (exercises thr_owner GCSCAN spin); t-co-02 cross-thread resume handoff of

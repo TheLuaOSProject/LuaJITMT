@@ -1501,7 +1501,7 @@ static int gc2_deferred_body_pending(global_State *g, GCobj *o)
       g->allocf != lj_arena_allocf)
     return 0;
   a = lj_arena_of(o);
-  if (lj_arena_ishuge(a) || !(a->hdr.flags & LJ_AF_TRAVERSABLE))
+  if (lj_arena_ishuge(a) || !(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE))
     return 0;
   cell = lj_arena_cellof(o);
   return cell >= LJ_AFIRST_CELL && cell < LJ_ARENA_CELLS &&
@@ -6075,7 +6075,7 @@ int lj_mem_freegco_defer(global_State *g, void *p, GCSize osize)
       g->allocf != lj_arena_allocf)
     return 0;
   a = lj_arena_of(p);
-  if (lj_arena_ishuge(a) || !(a->hdr.flags & LJ_AF_TRAVERSABLE))
+  if (lj_arena_ishuge(a) || !(lj_arena_flags_acq(a) & LJ_AF_TRAVERSABLE))
     return 0;
   cell = lj_arena_cellof(p);
   if (cell < LJ_AFIRST_CELL || cell >= LJ_ARENA_CELLS ||

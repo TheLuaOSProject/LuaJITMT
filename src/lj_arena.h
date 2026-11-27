@@ -1744,7 +1744,7 @@ static LJ_AINLINE uint32_t lj_arena_state(const GCArena *a, uint32_t i)
 
 static LJ_AINLINE int lj_arena_ishuge(const GCArena *a)
 {
-  return (a->hdr.flags & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC;
+  return (lj_arena_flags_acq(a) & LJ_AF_HUGE_MAGIC) == LJ_AF_HUGE_MAGIC;
 }
 
 static LJ_AINLINE uint32_t lj_arena_ncells(size_t size)
