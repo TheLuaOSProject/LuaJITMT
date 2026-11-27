@@ -158,8 +158,8 @@ typedef struct LJThrTGSignalCell {
 } LJThrTGSignalCell;
 
 static LJThrTGSignalCell *lj_tg_signal_buckets[LJ_THR_TG_SIGNAL_BUCKETS];
-static pthread_key_t lj_tg_signal_key;
-static uint32_t lj_tg_signal_key_state;
+/* Zero is uninitialized, UINTPTR_MAX is sealed, other values encode key + 1. */
+static uintptr_t lj_tg_signal_key_word;
 static uint32_t lj_tg_signal_atfork_state;
 static uint32_t lj_tg_signal_process_poisoned;
 static uint64_t lj_tg_signal_generation = 1u;
@@ -193,10 +193,11 @@ static int lj_thr_signal_test_fail_now(uint32_t *count);
 typedef char lj_thr_signal_pthread_id_must_fit[
   sizeof(pthread_t) == sizeof(uintptr_t) ? 1 : -1];
 
-#define LJ_THR_SIGNAL_KEY_EMPTY 0u
-#define LJ_THR_SIGNAL_KEY_BUILDING 1u
-#define LJ_THR_SIGNAL_KEY_READY 2u
-#define LJ_THR_SIGNAL_KEY_DEAD 3u
+#define LJ_THR_ATFORK_EMPTY 0u
+#define LJ_THR_ATFORK_BUILDING 1u
+#define LJ_THR_ATFORK_READY 2u
+typedef char lj_thr_signal_key_must_fit[
+  sizeof(pthread_key_t) <= sizeof(uintptr_t) ? 1 : -1];
 
 /* Function-address relocations are resolved when the image is loaded, unlike
 ** a lazy PLT/TLV call first reached from a signal. Artifact gates check that
@@ -302,12 +303,9 @@ static void lj_thr_signal_process_advance(uintptr_t process)
   } else {
     la_store64_rel(&lj_tg_signal_generation, generation + 1u);
   }
-  if (la_load32_acq(&lj_tg_signal_key_state) ==
-      LJ_THR_SIGNAL_KEY_BUILDING)
-    la_store32_rel(&lj_tg_signal_key_state, LJ_THR_SIGNAL_KEY_EMPTY);
   if (la_load32_acq(&lj_tg_signal_atfork_state) ==
-      LJ_THR_SIGNAL_KEY_BUILDING)
-    la_store32_rel(&lj_tg_signal_atfork_state, LJ_THR_SIGNAL_KEY_EMPTY);
+      LJ_THR_ATFORK_BUILDING)
+    la_store32_rel(&lj_tg_signal_atfork_state, LJ_THR_ATFORK_EMPTY);
   la_storeuptr_rel(&lj_tg_signal_process_cached, process);
 }
 
@@ -416,18 +414,18 @@ static int lj_thr_signal_atfork_ensure(void)
   int saved_errno = errno;
   for (;;) {
     uint32_t state = la_load32_acq(&lj_tg_signal_atfork_state);
-    if (state == LJ_THR_SIGNAL_KEY_READY) {
+    if (state == LJ_THR_ATFORK_READY) {
       errno = saved_errno;
       return 1;
     }
-    if (state == LJ_THR_SIGNAL_KEY_EMPTY) {
-      uint32_t expected = LJ_THR_SIGNAL_KEY_EMPTY;
+    if (state == LJ_THR_ATFORK_EMPTY) {
+      uint32_t expected = LJ_THR_ATFORK_EMPTY;
       if (la_cas32(&lj_tg_signal_atfork_state, &expected,
-                   LJ_THR_SIGNAL_KEY_BUILDING, LA_ACQ_REL, LA_ACQ)) {
+                   LJ_THR_ATFORK_BUILDING, LA_ACQ_REL, LA_ACQ)) {
         int rc = pthread_atfork(NULL, NULL, lj_thr_signal_atfork_child);
         la_store32_rel(&lj_tg_signal_atfork_state,
-                       rc == 0 ? LJ_THR_SIGNAL_KEY_READY :
-                                 LJ_THR_SIGNAL_KEY_EMPTY);
+                       rc == 0 ? LJ_THR_ATFORK_READY :
+                                 LJ_THR_ATFORK_EMPTY);
         errno = saved_errno;
         return rc == 0;
       }
@@ -506,15 +504,14 @@ void lj_thr_tg_signal_test_advance_same_process(void)
   lj_thr_signal_process_advance(lj_thr_signal_process());
 }
 
-void lj_thr_tg_signal_test_force_building(void)
+void lj_thr_tg_signal_test_force_atfork_building(void)
 {
-  la_store32_rel(&lj_tg_signal_key_state, LJ_THR_SIGNAL_KEY_BUILDING);
-  la_store32_rel(&lj_tg_signal_atfork_state, LJ_THR_SIGNAL_KEY_BUILDING);
+  la_store32_rel(&lj_tg_signal_atfork_state, LJ_THR_ATFORK_BUILDING);
 }
 
-uint32_t lj_thr_tg_signal_test_key_state(void)
+uint32_t lj_thr_tg_signal_test_atfork_state(void)
 {
-  return la_load32_acq(&lj_tg_signal_key_state);
+  return la_load32_acq(&lj_tg_signal_atfork_state);
 }
 #endif
 
@@ -539,50 +536,46 @@ static void lj_thr_signal_cell_destructor(void *ptr)
   la_storeuptr_rel(&cell->owner, 0);
 }
 
-static int lj_thr_signal_key_ensure(void)
+static int lj_thr_signal_key_decode(uintptr_t word, pthread_key_t *key)
 {
-  /* Temporary cold admission bridge: pthread_key_create and the losing
-  ** BUILDING sched_yield path are not part of the final nonblocking proof.
-  ** Failure reopens EMPTY so a later admission can retry instead of inheriting
-  ** pthread_once's permanent failed initialization. */
-  int saved_errno = errno;
-  if (!lj_thr_signal_process_repair(NULL)) {
-    errno = saved_errno;
+  if (word == 0 || word == UINTPTR_MAX)
     return 0;
-  }
-  for (;;) {
-    uint32_t state = la_load32_acq(&lj_tg_signal_key_state);
-    if (state == LJ_THR_SIGNAL_KEY_READY) {
-      errno = saved_errno;
-      return 1;
-    }
-    if (state == LJ_THR_SIGNAL_KEY_DEAD) {
-      errno = saved_errno;
-      return 0;
-    }
-    if (state == LJ_THR_SIGNAL_KEY_EMPTY) {
-      uint32_t expected = LJ_THR_SIGNAL_KEY_EMPTY;
-      if (la_cas32(&lj_tg_signal_key_state, &expected,
-                   LJ_THR_SIGNAL_KEY_BUILDING, LA_ACQ_REL, LA_ACQ)) {
-        int rc;
+  *key = (pthread_key_t)(word - 1u);
+  return 1;
+}
+
+static int lj_thr_signal_key_ensure(pthread_key_t *key)
+{
+  int saved_errno = errno;
+  uintptr_t word;
+  if (!lj_thr_signal_process_repair(NULL))
+    return 0;
+  word = la_loaduptr_acq(&lj_tg_signal_key_word);
+  if (word == 0) {
+    pthread_key_t candidate;
+    int rc;
+    /* No admission owns initialization. A suspended caller can retain its
+    ** private key, but another caller can still publish a completed key. */
 #if defined(LJ_THR_SIGNAL_TEST_HELPERS)
-        if (lj_thr_signal_test_fail_now(
-              &lj_tg_signal_test_fail_key_create_after))
-          rc = EAGAIN;
-        else
+    if (lj_thr_signal_test_fail_now(&lj_tg_signal_test_fail_key_create_after))
+      rc = EAGAIN;
+    else
 #endif
-          rc = pthread_key_create(&lj_tg_signal_key,
-                                  lj_thr_signal_cell_destructor);
-        la_store32_rel(&lj_tg_signal_key_state,
-                       rc == 0 ? LJ_THR_SIGNAL_KEY_READY :
-                                 LJ_THR_SIGNAL_KEY_EMPTY);
-        errno = saved_errno;
-        return rc == 0;
-      }
-      continue;
+      rc = pthread_key_create(&candidate, lj_thr_signal_cell_destructor);
+    if (rc == 0) {
+      uintptr_t encoded = (uintptr_t)candidate + 1u;
+      if (encoded != 0 && encoded != UINTPTR_MAX &&
+          la_casuptr(&lj_tg_signal_key_word, &word, encoded,
+                     LA_ACQ_REL, LA_ACQ))
+        word = encoded;
+      else
+        (void)pthread_key_delete(candidate);  /* No value was installed. */
     }
-    (void)sched_yield();
+    if (word == 0)
+      word = la_loaduptr_acq(&lj_tg_signal_key_word);
   }
+  errno = saved_errno;
+  return lj_thr_signal_key_decode(word, key);
 }
 
 int lj_thr_tg_signal_activate(void)
@@ -595,23 +588,24 @@ int lj_thr_tg_signal_activate(void)
 
 static LJThrTGSignalCell *lj_thr_signal_cell_specific(void)
 {
-  if (la_load32_acq(&lj_tg_signal_key_state) !=
-      LJ_THR_SIGNAL_KEY_READY)
+  pthread_key_t key;
+  if (!lj_thr_signal_key_decode(la_loaduptr_acq(&lj_tg_signal_key_word), &key))
     return NULL;
-  return (LJThrTGSignalCell *)pthread_getspecific(lj_tg_signal_key);
+  return (LJThrTGSignalCell *)pthread_getspecific(key);
 }
 
 static LJThrTGSignalCell *lj_thr_signal_cell_prepare(void)
 {
   LJThrTGSignalCell *cell, *head;
+  pthread_key_t key;
   uint64_t generation;
   uintptr_t process, owner;
   uint32_t bucket;
   int fresh;
   int saved_errno = errno;
-  if (!lj_thr_signal_key_ensure())
+  if (!lj_thr_signal_key_ensure(&key))
     return NULL;
-  cell = (LJThrTGSignalCell *)pthread_getspecific(lj_tg_signal_key);
+  cell = (LJThrTGSignalCell *)pthread_getspecific(key);
   process = la_loaduptr_acq(&lj_tg_signal_process_cached);
   generation = la_load64_acq(&lj_tg_signal_generation);
   owner = lj_thr_signal_owner();
@@ -652,13 +646,11 @@ static LJThrTGSignalCell *lj_thr_signal_cell_prepare(void)
   {
     int publish_error;
 #if defined(LJ_THR_SIGNAL_TEST_HELPERS)
-    publish_error = lj_thr_signal_test_fail_now(
-      &lj_tg_signal_test_fail_cell_publish_after) ? ENOMEM :
-                                                    pthread_setspecific(
-                                                      lj_tg_signal_key, cell);
-#else
-    publish_error = pthread_setspecific(lj_tg_signal_key, cell);
+    if (lj_thr_signal_test_fail_now(&lj_tg_signal_test_fail_cell_publish_after))
+      publish_error = ENOMEM;
+    else
 #endif
+      publish_error = pthread_setspecific(key, cell);
     if (publish_error != 0) {
       if (fresh)
         free(cell);
@@ -779,10 +771,11 @@ LUA_API void luaJIT_thr_tg_signal_test_end(void)
 ** contract, but merely unloading after users stopped is safe. */
 static void __attribute__((destructor)) lj_thr_signal_cache_fini(void)
 {
-  uint32_t state = la_load32_acq(&lj_tg_signal_key_state);
+  uintptr_t word = la_loaduptr_acq(&lj_tg_signal_key_word);
+  pthread_key_t key;
   uint32_t bucket;
-  if (state == LJ_THR_SIGNAL_KEY_READY) {
-    la_store32_rel(&lj_tg_signal_key_state, LJ_THR_SIGNAL_KEY_DEAD);
+  la_storeuptr_rel(&lj_tg_signal_key_word, UINTPTR_MAX);
+  if (lj_thr_signal_key_decode(word, &key)) {
     for (bucket = 0; bucket < LJ_THR_TG_SIGNAL_BUCKETS; bucket++) {
       LJThrTGSignalCell *cell = (LJThrTGSignalCell *)
         la_loadptr_acq((void *const *)&lj_tg_signal_buckets[bucket]);
@@ -791,7 +784,7 @@ static void __attribute__((destructor)) lj_thr_signal_cache_fini(void)
         cell = cell->next;
       }
     }
-    (void)pthread_key_delete(lj_tg_signal_key);
+    (void)pthread_key_delete(key);
   }
 #if LJ_TARGET_LINUX
   /* Once atfork is READY the caller's image is process-stable and a handler
@@ -799,7 +792,7 @@ static void __attribute__((destructor)) lj_thr_signal_cache_fini(void)
   ** Before activation (notably a failed profile pin), no callback/handler was
   ** installed and an ordinary stopped-user dlclose may reclaim it. */
   if (la_load32_acq(&lj_tg_signal_atfork_state) ==
-      LJ_THR_SIGNAL_KEY_EMPTY) {
+      LJ_THR_ATFORK_EMPTY) {
     LJThrSignalForkPage *page = (LJThrSignalForkPage *)
       la_loadptr_acq((void *const *)&lj_tg_signal_fork_page);
     la_storeptr_rel((void **)&lj_tg_signal_fork_page, NULL);

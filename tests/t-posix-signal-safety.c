@@ -392,13 +392,13 @@ static void test_signal_cache(void)
   assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 
   /* A raw/missed fork is modeled by a mismatched cached PID. Cold admission
-  ** repairs it, advances exactly once, and resets inherited BUILDING states. */
+  ** repairs it, advances exactly once, and resets inherited atfork registration. */
   child = fork();
   assert(child >= 0);
   if (child == 0) {
     uint64_t generation = lj_thr_tg_signal_test_generation();
     lj_thr_tg_signal_test_force_process((uintptr_t)getpid() + 1u);
-    lj_thr_tg_signal_test_force_building();
+    lj_thr_tg_signal_test_force_atfork_building();
     assert(lj_thr_get_tg_signal() == NULL);
     assert(lj_tgregistry_try_borrow(&akey, &ahold, &snap) == LJ_TGSLOT_OK);
     assert(lj_thr_tg_swap(&bkey, &ahold, &old) == LJ_THR_TG_OK);
@@ -413,19 +413,18 @@ static void test_signal_cache(void)
   assert(waitpid(child, &status, 0) == child);
   assert(WIFEXITED(status) && WEXITSTATUS(status) == 0);
 
-  /* A fork while cold builders are marked in progress cannot leave the child
-  ** spinning for vanished threads. The child callback invalidates both words. */
+  /* The child can retry an atfork registration interrupted in its parent. */
   child = fork();
   assert(child >= 0);
   if (child == 0) {
     uint64_t generation = lj_thr_tg_signal_test_generation();
     pid_t grandchild;
-    lj_thr_tg_signal_test_force_building();
+    lj_thr_tg_signal_test_force_atfork_building();
     grandchild = fork();
     assert(grandchild >= 0);
     if (grandchild == 0) {
       assert(lj_thr_tg_signal_test_generation() == generation + 1u);
-      assert(lj_thr_tg_signal_test_key_state() == 0u);
+      assert(lj_thr_tg_signal_test_atfork_state() == 0u);
       assert(lj_thr_get_tg_signal() == NULL);
       _exit(0);
     }

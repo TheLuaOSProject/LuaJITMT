@@ -338,6 +338,14 @@ return function(add)
                        "-Wl,--wrap=pthread_setspecific" },
               timeout = "20s"
             })
+          build.compile_and_run_c(t, t:tmp("lj_t-posix-signal-key-progress"),
+            "t-posix-signal-key-progress.c", {
+              cflags = flags,
+              libs = { "-lm", "-ldl", os.getenv("PTHREAD") or "-pthread",
+                       "-Wl,--wrap=pthread_key_create",
+                       "-Wl,--wrap=pthread_key_delete", "-Wl,--wrap=sched_yield" },
+              timeout = "20s"
+            })
         end
       end)
       print("M4 POSIX signal cache/timer lifecycle tests passed")

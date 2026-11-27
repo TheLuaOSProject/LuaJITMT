@@ -243,3 +243,20 @@ in 15 of 15 processes. The new cache passed in 60 of 60 across five builds.
 Slots remain allocated for reuse after a peak and old process incarnations
 remain inaccessible after fork.
 [Signal reuse test](../tests/t-posix-signal-cell-reuse.c).
+
+A paused cold profiler admission previously stopped other pthreads at the
+process-wide key initializer. Each contender now creates a private pthread
+key and publishes the completed key in a single atomic word. A losing caller
+deletes its unused key. A caller whose allocation failed also checks for a
+concurrent publication. glibc 2.41 claims and releases native key slots by
+compare-and-exchange and reports EAGAIN when all slots are occupied.
+[glibc key creation](https://github.com/bminor/glibc/blob/release/2.41/master/nptl/pthread_key_create.c),
+[glibc key deletion](https://github.com/bminor/glibc/blob/release/2.41/master/nptl/pthread_key_delete.c).
+
+With the first caller suspended inside pthread_key_create, the second
+caller waited for it in all 25 baseline processes. In 200 candidate
+processes the second caller published its key and sampled its TG before
+resuming the first. Each process also exercised an EAGAIN return to the
+first caller after the second published. The fork-incarnation and profiler
+timer lifecycle fixture passed another 50 times across five builds.
+[Cold initialization regression](../tests/t-posix-signal-key-progress.c).
