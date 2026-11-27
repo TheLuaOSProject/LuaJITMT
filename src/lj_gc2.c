@@ -3115,6 +3115,13 @@ int lj_gc2_collect_active(lua_State *L)
   ** fail-closed instead of self-waiting forever for impossible work. */
   if (gc2_collection_stalled(g))
     return 0;
+  /* A quarantine from before the last peer left can prevent this major
+  ** cycle from selecting another batch of unreachable strings. Give the old
+  ** records their ordinary root and grace checks before starting the cycle. */
+  if (tg == g->main_tg && mt_live_acq(g) == 0 && gc2_n_workers_acq(g) == 0 &&
+      lj_str_reclaim_request_acq(g) == LJ_STR_RECLAIM_FULL &&
+      lj_str_body_retired_head_acq(g))
+    (void)lj_str_gc2_reclaim_checkpoint(g, 1u + 2u * LJ_GC2_GRACE_EPOCHS);
   /* Full collection can wait for the result. Its root and policy handshakes
   ** must release collector ownership between attempts, just like a GC step. */
   if (gc2_request_major_explicit(g, tg) && gc2_mark_begin(g, 1)) {
