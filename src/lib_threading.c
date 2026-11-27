@@ -663,7 +663,6 @@ static void threading_shutdown_clear_self_stopreq(lua_State *L)
 void lj_threading_shutdown(lua_State *L)
 {
   global_State *g = G(L);
-  TGState *cur = lj_thr_get_tg();
   LJThreadLive *node;
   LJThread *th;
   mt_shutdown_rel(g, 1);
@@ -671,9 +670,8 @@ void lj_threading_shutdown(lua_State *L)
   if (!lj_thread_live_head_acq(g) && mt_live_acq(g) == 0 &&
       mt_entering_acq(g) == 0)
     return;
-  lj_assertG(cur == NULL || cur == g->main_tg,
-	     "lua_close called from non-main OS thread");
-  UNUSED(cur);
+  lj_assertG(G2TG(g) == g->main_tg,
+	     "lua_close requires the physical owner of this main state");
   threading_wait_entering(L, g);
   if (mt_live_acq(g) != 0) {
     (void)lj_safepoint_handshake(g, LJ_GC2_HS_STOPREQ);

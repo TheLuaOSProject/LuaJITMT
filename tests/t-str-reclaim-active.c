@@ -299,6 +299,82 @@ static int request_pending(lua_State *L)
   return 1;
 }
 
+#if LJ_HASFFI
+static int mark_world_closed(lua_State *L)
+{
+  int *closed = (int *)lua_touserdata(L, lua_upvalueindex(1));
+  (*closed)++;
+  return 0;
+}
+
+static void check_nested_world_reclamation(int pool)
+{
+  static const char script[] =
+    "local probe, bytes, native, pool, closed = ...\n"
+    "local ffi, threading = require('ffi'), require('threading')\n"
+    "local invoke = ffi.cast('void (*)(const char *, void (*)(void))', native)\n"
+    "assert(threading.gcworkers(pool) == 0)\n"
+    "local ready, stop = threading.channel(1), threading.channel(1)\n"
+    "local peer = threading.spawn(function()\n"
+    "  assert(ready:send(true)); assert(stop:recv())\n"
+    "end)\n"
+    "assert(ready:recv(10))\n"
+    "probe(4)\n"
+    "local called = false\n"
+    "local cb = ffi.cast('void (*)(void)', function()\n"
+    "  for i = 1, 4 do collectgarbage() end\n"
+    "  assert(probe(), 'retired a body inside the native callback')\n"
+    "  called = true\n"
+    "end)\n"
+    "invoke(bytes, cb); assert(called); cb:free()\n"
+    "for i = 1, 40 do if not probe() then break end; collectgarbage() end\n"
+    "assert(not probe(), 'full collections retained the inner mapping')\n"
+    "probe(5)\n"
+    "for i = 1, 20000 do\n"
+    "  if not probe() then break end; collectgarbage('step', 1)\n"
+    "end\n"
+    "assert(not probe(), 'incremental collections retained the inner mapping')\n"
+    "probe(6)\n"
+    "local ring = {}\n"
+    "for round = 1, 160 do\n"
+    "  if not probe() then break end\n"
+    "  for j = 1, 384 do ring[j%24+1] = ('x%d-'):format(round*384+j):rep(17) end\n"
+    "end\n"
+    "assert(not probe(), 'allocation pressure retained the inner mapping')\n"
+    "world_finalizer = newproxy(true); getmetatable(world_finalizer).__gc = closed\n"
+    "if pool == 0 then assert(stop:send(true)); assert(peer:join()) end\n";
+  lua_State *outer = luaL_newstate(), *inner;
+  const char *outer_bytes;
+  int status, closed = 0;
+  assert(outer);
+  luaL_openlibs(outer);
+  memset(held, 'H', sizeof(held)-1);
+  lua_pushlstring(outer, held, sizeof(held)-1);
+  outer_bytes = lua_tolstring(outer, 1, NULL);
+  inner = luaL_newstate();
+  assert(inner);
+  luaL_openlibs(inner);
+  assert(lj_thr_get_tg() == G(outer)->main_tg);
+  assert(luaL_loadstring(inner, script) == 0);
+  lua_pushcfunction(inner, probe_huge_mapping);
+  lua_pushlstring(inner, held, sizeof(held)-1);
+  assert(lua_tolstring(inner, -1, NULL) != outer_bytes);
+  lua_pushlightuserdata(inner, (void *)(uintptr_t)with_borrowed_string);
+  lua_pushinteger(inner, pool);
+  lua_pushlightuserdata(inner, &closed);
+  lua_pushcclosure(inner, mark_world_closed, 1);
+  status = lua_pcall(inner, 5, 0, 0);
+  if (status) fprintf(stderr, "%s\n", lua_tostring(inner, -1));
+  assert(status == 0);
+  lua_close(inner);
+  assert(closed == 1);
+  assert(lj_thr_get_tg() == G(outer)->main_tg);
+  assert(lua_tolstring(outer, 1, NULL) == outer_bytes);
+  assert(memcmp(outer_bytes, held, sizeof(held)) == 0);
+  lua_close(outer);
+}
+#endif
+
 static void check_request_ownership(void)
 {
   static const char script[] =
@@ -580,6 +656,10 @@ static void check_worker_collection(int use_jit, int pool)
 
 int main(void)
 {
+#if LJ_HASFFI
+  check_nested_world_reclamation(0);
+  check_nested_world_reclamation(2);
+#endif
   check_request_ownership();
   check_worker_collection(0, 0);
   check_worker_collection(0, 2);

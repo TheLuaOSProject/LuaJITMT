@@ -1631,7 +1631,9 @@ static void str_body_retired_push(global_State *g, StrBodyRetire *ret)
 
 int lj_str_gc2_reclaim_request(global_State *g, uint32_t request)
 {
-  TGState *tg = lj_thr_get_tg();
+  /* A pthread may own several main states while raw TLS names the first.
+  ** Obtain the physical owner for the universe whose strings can retire. */
+  TGState *tg = G2TG(g);
   uint64_t expect = 0;
   uint32_t tid;
   if (!g || !tg || tg->gl != g)
@@ -1660,7 +1662,7 @@ int lj_str_gc2_reclaim_request(global_State *g, uint32_t request)
 
 void lj_str_gc2_reclaim_cancel(global_State *g)
 {
-  TGState *tg = lj_thr_get_tg();
+  TGState *tg = G2TG(g);
   uint64_t scope;
   if (!g || !tg || tg->gl != g)
     return;
@@ -1700,7 +1702,7 @@ static int str_gc_worker(global_State *g, TGState *tg)
 ** record always requires an actual request on its initiating Lua thread. */
 static TGState *str_vm_reclaim_owner(global_State *g, uint64_t scope, int stage)
 {
-  TGState *executor = lj_thr_get_tg();
+  TGState *executor = G2TG(g);
   TGState *owner;
   uint32_t request = (uint32_t)scope;
   uint32_t tid = (uint32_t)(scope >> 32);
@@ -1837,7 +1839,7 @@ static int str_reclaim_exclusive_try(global_State *g)
       la_load32_acq(&g->allocf_arena) == 0 ||
       lj_str_qcount_acq(g) != 0 || lj_gc2_finalizer_phase_pending(g))
     return 0;
-  tg = lj_thr_get_tg();
+  tg = G2TG(g);
   if (!tg || tg != g->main_tg || tg->gl != g ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
       lj_str_reclaim_scope_acq(g) !=
@@ -1889,7 +1891,7 @@ static int str_reclaim_exclusive_try(global_State *g)
 
 static StrRetireBatch *str_retire_batch_new(global_State *g, StrTabHdr *hdr)
 {
-  TGState *tg = lj_thr_get_tg();
+  TGState *tg = G2TG(g);
   StrRetireBatch *batch;
   if (!g || !hdr || !tg || tg != g->main_tg || tg->gl != g ||
       !lj_tg_flags_test_acq(tg, TGF_ARENA_INTERNAL) ||
@@ -1943,7 +1945,7 @@ static StrRetireBatch *str_retire_batch_current(global_State *g,
   if (!batch) {
     batch = str_retire_batch_new(g, hdr);
     if (batch) {
-      TGState *tg = lj_thr_get_tg();
+      TGState *tg = G2TG(g);
       /* Make the initialized allocation globally discoverable before the
       ** accounting checkpoint can trigger a hard-limit assist. */
       lj_gc_total_add(g, sizeof(*batch));
@@ -2009,7 +2011,7 @@ static uint32_t str_retire_batches_reclaim_all(global_State *g,
 static StrBodyRetire *str_body_retire_new(global_State *g, GCstr *s,
 					   StrTabHdr *hdr)
 {
-  TGState *tg = lj_thr_get_tg();
+  TGState *tg = G2TG(g);
   StrBodyRetire *ret;
   if (!g || !s || !hdr)
     return NULL;
@@ -2091,7 +2093,7 @@ int lj_str_test_quarantine_detach(lua_State *L, GCstr *s)
   la_store32_rel(&rec->status, LJ_STR_CANONREC_LIST_ONLY);
   lj_str_body_retired_epoch_rel(rec, lj_gc2_retire_epoch(g));
   str_body_retired_push(g, rec);
-  lj_gc2_account_alloc(g, lj_thr_get_tg(), sizeof(*rec));
+  lj_gc2_account_alloc(g, G2TG(g), sizeof(*rec));
   strcanon_bucket_publish(L, g, rec);  /* Reservation precedes main unlink. */
 
   /* Snapshot and claim main topology only after every allocating/waiting Q
@@ -2284,7 +2286,7 @@ static uint32_t str_sweep_tag_one(global_State *g, StrTabHdr *hdr)
 static uint32_t str_sweep_unlink_active(global_State *g, StrTabHdr *mainhdr,
 					 GCRef *link, uintptr_t u, GCobj *o)
 {
-  TGState *tg = lj_thr_get_tg();
+  TGState *tg = G2TG(g);
   StrCanonHdr *qhdr;
   GCstr *s = gco2str(o);
   StrCanonRec *rec;

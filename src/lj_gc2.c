@@ -8761,7 +8761,7 @@ static int gc2_parked_wait_frame(global_State *g, lua_State *L)
 ** can scan a wider stack than this physical owner. */
 void lj_gc2_clear_unused_call_slots(lua_State *L)
 {
-  TGState *tg = lj_thr_get_tg();
+  TGState *tg = G2TG(G(L));
   TValue *bot, *limit, *top, *frame, *caller;
   const BCIns *pc;
   GCproto *pt;

@@ -37,9 +37,8 @@ static int nested_call(lua_State *L)
   return 0;
 }
 
-int main(void)
+static void check_state(lua_State *L)
 {
-  lua_State *L = ljt_lua_newstate_openlibs();
   lua_register(L, "check_slots", check_slots);
   lua_register(L, "nested_call", nested_call);
   ljt_lua_dostring(L,
@@ -69,7 +68,16 @@ int main(void)
     "ffi.C.qsort(values, 2, ffi.sizeof('int32_t'), cmp)\n"
     "assert(values[0] == 2 and values[1] == 9)\n"
     "cmp:free()");
-  lua_close(L);
+}
+
+int main(void)
+{
+  lua_State *outer = ljt_lua_newstate_openlibs();
+  lua_State *inner = ljt_lua_newstate_openlibs();
+  check_state(outer);
+  check_state(inner);
+  lua_close(inner);
+  lua_close(outer);
   puts("t-gc2-call-slots OK");
   return 0;
 }

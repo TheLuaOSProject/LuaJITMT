@@ -4336,7 +4336,7 @@ static int gc_auto_string_checkpoint(lua_State *L, int context, int *drove)
   if (!reasons)
     return LUA_OK;
   if (!lj_gc_auto_running(g) ||
-      lj_thr_get_tg() != tg ||
+      G2TG(g) != tg ||
       lj_tg_load_cur_L(tg) != L || lj_tg_in_native_acq(tg) ||
       lj_tg_load_jit_base(tg) || mt_shutdown_acq(g) ||
       g->allocf != lj_arena_allocf || !la_load32_acq(&g->allocf_arena) ||
