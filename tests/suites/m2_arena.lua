@@ -135,10 +135,8 @@ return function(add)
                            { timeout = "30s" })
       for _, name in ipairs({ "t-arena-dead-plain", "t-tg-dead-empty-live" }) do
         local out = t:tmp(name)
-        local opts = { env = { POOL = "0" }, timeout = "30s" }
-        if name == "t-arena-dead-plain" then
-          opts.libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=munmap" }
-        end
+        local opts = { env = { POOL = "0" }, timeout = "30s",
+                       libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=munmap" } }
         build.compile_and_run_c(t, out, name .. ".c", opts)
         t:run({ out }, { env = { POOL = "2" }, timeout = "30s" })
       end
