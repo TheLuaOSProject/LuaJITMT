@@ -1,6 +1,7 @@
 /* A shutdown poll at a protected call return must preserve the caller's stack. */
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -10,6 +11,7 @@
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_tg.h"
+#include "lj_thr.h"
 #include "lib/lua_fixture_helpers.h"
 
 static uint32_t entered, finished;
@@ -105,6 +107,65 @@ static void run(int pool, int mode)
   assert(la_load32_acq(&entered) == 1 && la_load32_acq(&finished) == 1);
 }
 
+#ifdef LJ_GC2_TEST_HELPERS
+static uint32_t parked_tid, consumed, waiting;
+
+static void stop_wait_hook(global_State *g, TGState *tg, uint64_t epoch,
+			   uint32_t point)
+{
+  UNUSED(epoch);
+  if (lj_tg_tid_acq(tg) != la_load32_acq(&parked_tid))
+    return;
+  if (point == LJ_SAFEPOINT_COMPLETION_TEST_CONSUMED &&
+      gc2_hs_actions_acq(g) == LJ_GC2_HS_STOPREQ) {
+    assert(lj_thr_get_tg() != tg && !lj_tg_reqmask_acq(tg));
+    la_store32_rel(&consumed, 1);
+    while (!la_load32_acq(&waiting)) la_cpu_pause();
+  } else if (point == LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_WAIT &&
+	     la_load32_acq(&consumed)) {
+    assert(lj_thr_get_tg() == tg);
+    la_store32_rel(&waiting, 1);
+    /* Let the remote leader finish both stores before the real futex wait. */
+    while (gc2_hs_leader_acq(g) || !lj_tg_poll_acq(tg) ||
+	   !lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) la_cpu_pause();
+  }
+}
+
+static int leave_armed_wait(lua_State *L)
+{
+  TGState *tg = L2TG(L);
+  uint32_t actions;
+  la_store32_rel(&parked_tid, lj_tg_tid_acq(tg));
+  lj_native_enter(tg);
+  la_store32_rel(&entered, 1);
+  while (!la_load32_acq(&consumed)) la_cpu_pause();
+  actions = lj_native_leave(L);
+  assert(actions == LJ_GC2_HS_STOPREQ);
+  lj_safepoint_checkstop(L, actions);
+  abort();
+}
+
+static void run_consumed_stop(void)
+{
+  lua_State *L = ljt_lua_newstate_openlibs();
+  la_store32_rlx(&entered, 0);
+  la_store32_rlx(&finished, 0);
+  lua_register(L, "leave_armed_wait", leave_armed_wait);
+  lua_register(L, "wait_for_callback", wait_for_callback);
+  lua_register(L, "observe_shutdown", observe_shutdown);
+  lj_safepoint_test_completion_hook(stop_wait_hook);
+  ljt_lua_dostring(L,
+    "require('threading').spawn(function()\n"
+    "  local ok, err = pcall(leave_armed_wait)\n"
+    "  observe_shutdown(ok, err, 'caller guard')\n"
+    "end)\n"
+    "wait_for_callback()\n");
+  lua_close(L);
+  lj_safepoint_test_completion_hook(NULL);
+  assert(la_load32_acq(&waiting) && la_load32_acq(&finished) == 1);
+}
+#endif
+
 int main(void)
 {
   int pool;
@@ -118,6 +179,9 @@ int main(void)
     run(pool, ERROR_EVENT);
 #endif
   }
+#ifdef LJ_GC2_TEST_HELPERS
+  run_consumed_stop();
+#endif
   puts("shutdown during a finalizer return preserves the interrupted worker frame");
   return 0;
 }

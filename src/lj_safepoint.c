@@ -206,12 +206,13 @@ static int safepoint_wait_consumed_ack(TGState *tg, uint32_t actions)
   while ((poll = lj_tg_poll_acq(tg)) != 0) {
     global_State *g = tg->gl;
     uint32_t tid = lj_tg_tid_acq(tg);
+    uint32_t leader = g ? gc2_hs_leader_acq(g) : 0;
     /* A trace-flush leader can re-enter native boundaries while it runs
     ** leader-owned actions such as JIT dump events. It must not wait for its
     ** own consumed poll: only the leader can clear that poll after the action
     ** finishes.
     */
-    if (g && tid != 0 && gc2_hs_leader_acq(g) == tid)
+    if (tid != 0 && leader == tid)
       return 0;
     /*
     ** A trace-exit C frame keeps jit_base published through snapshot restore.
@@ -228,7 +229,11 @@ static int safepoint_wait_consumed_ack(TGState *tg, uint32_t actions)
 #endif
 	)
       return 0;
-    if (lj_tg_reqmask_acq(tg) != 0)
+    /* The shutdown leader can clear and rearm poll while this owner sleeps.
+    ** The new value of one carries its interrupt to the VM. Re-enter the ACK
+    ** path once the leader has finished touching this owner's frame. */
+    if (lj_tg_reqmask_acq(tg) != 0 ||
+	(g && leader == 0 && lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)))
       return 1;
     safepoint_completion_test_pause(g, tg, gc2_hs_epoch_acq(g),
       LJ_SAFEPOINT_COMPLETION_TEST_BEFORE_WAIT);
