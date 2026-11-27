@@ -166,3 +166,19 @@ gcc -O2 -mcx16 $checks -Isrc -Itests "$evidence/census.c" \
   src/libluajit.a -lm -ldl -pthread -o /tmp/lj-live-plain-census
 WAVES=960 WORKLOAD=mixed JIT=on POOL=2 /tmp/lj-live-plain-census "$evidence/workload.lua"
 ```
+
+## Size classes visited during empty arena reuse
+
+A worker sampled during a quiet interval of the mixed JIT and GC workload was checking free runs from a different arena. The PLAIN allocator now records the size classes to which each arena has contributed runs. The structural owner sets a bit before linking a run, including during rebuild and transfer. It clears the mask only after validating the indexed chains and unlinking the complete arena. Every payload cell still requires nonoverlapping bin coverage, including when the block bitmap is empty. The index shares header space with the huge-mapping table stamp, whose mapping kind is fixed at allocation.
+
+One control filled the candidate arena with 54 allocations of 1 KiB and its 24-cell tail, then freed all 55. Other arenas held alternating 16-byte allocations and live guards. Each time the allocator obtained 8 KiB from the candidate and the guards retained their byte patterns. Each row gives the median CPU time for that allocation in 11 fresh GCC processes per version, alternating the order on CPU 2. Counters in the coverage walk counted each validated node. The time includes the separate owned-arena search. [Per-process observations](evidence/live-plain-reuse-2026-11-27/bin-scan.csv).
+
+| Unrelated free runs | Baseline nodes examined | Indexed nodes examined | Baseline µs | Indexed µs |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 55 | 55 | 8.9 | 9.5 |
+| 2,048 | 2,103 | 55 | 28.8 | 8.9 |
+| 16,384 | 16,439 | 55 | 169.3 | 14.2 |
+| 65,536 | 65,591 | 55 | 995.0 | 26.5 |
+| 131,072 | 131,127 | 55 | 1,892.5 | 39.1 |
+
+The x64 Linux regression protects the page holding an unrelated 16-byte bin node while coalescing the candidate. After restoring page access, the next allocation in that class reuses that exact node. All 15 baseline processes touched the protected page. The patched build passed 60 targeted processes and 15 complete bin-capacity runs across GCC, Clang assertions, ASan, UBSan and TSan. Four builds also passed the stock source, imported bytecode and shared-runtime gates. Runs from other arenas in a size class used by the candidate still participate in the chain validation. [Regression](../tests/t-arena-bin-capacity.c).

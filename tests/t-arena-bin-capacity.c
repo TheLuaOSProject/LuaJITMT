@@ -13,6 +13,10 @@
 #include "lj_arena.h"
 #include "lj_prng.h"
 
+#if LJ_TARGET_LINUX && LJ_TARGET_X64
+#include <sys/mman.h>
+#endif
+
 #define CAPACITY_RUNS 9000u
 #define SEARCH_PREFIX 8192u
 #define BLOCK_BYTES 1024u
@@ -167,7 +171,18 @@ static void *publish_blocks(void *ud)
   return NULL;
 }
 enum FragmentCase { FRAGMENT_LOCAL, FRAGMENT_REMOTE, FRAGMENT_READER,
-                    FRAGMENT_RESERVED, FRAGMENT_RESERVE_BUMP };
+                    FRAGMENT_RESERVED, FRAGMENT_RESERVE_BUMP, FRAGMENT_CLASSES };
+
+#if LJ_TARGET_LINUX && LJ_TARGET_X64
+static void set_run_page_access(void *run, int access)
+{
+  uintptr_t pagesize = (uintptr_t)sysconf(_SC_PAGESIZE);
+  uintptr_t page = (uintptr_t)run & ~(pagesize-1u);
+  /* Leave the unrelated arena's header and bitmaps accessible. */
+  assert(page >= (uintptr_t)lj_arena_of(run) + LJ_ARENA_META_BYTES);
+  assert(mprotect((void *)page, pagesize, access) == 0);
+}
+#endif
 
 static int test_fragmented_plain(enum FragmentCase mode)
 {
@@ -180,6 +195,9 @@ static int test_fragmented_plain(enum FragmentCase mode)
   uint32_t large = 4u * BLOCK_BYTES;
   unsigned char **blocks = calloc(targets + slots, sizeof(*blocks));
   unsigned char *value;
+#if LJ_TARGET_LINUX && LJ_TARGET_X64
+  unsigned char *unrelated = NULL;
+#endif
   assert(blocks);
   lj_prng_seed_fixed(&w.prng);
   lj_arena_alloc_init(&w.alloc);
@@ -198,6 +216,15 @@ static int test_fragmented_plain(enum FragmentCase mode)
   assert(target != guard_arena);
   assert(lj_arena_alloc_owned_count_acq(&w.alloc, LJ_ARENAK_PLAIN) == 2);
   for (i = 0; i < targets; i++) assert(lj_arena_of(blocks[i]) == target);
+#if LJ_TARGET_LINUX && LJ_TARGET_X64
+  if (mode == FRAGMENT_CLASSES) {
+    unrelated = lj_arena_alloc(&w.alloc, &w.prng, LJ_CELL_SIZE, 0);
+    assert(unrelated && lj_arena_of(unrelated) == guard_arena);
+    w.kind = LJ_ARENAK_PLAIN;
+    exhaust_bump(&w);
+    lj_arena_free(&w.alloc, unrelated, LJ_CELL_SIZE);
+  }
+#endif
   if (mode == FRAGMENT_REMOTE) {
     pthread_t producer;
     w.count = targets;
@@ -208,6 +235,9 @@ static int test_fragmented_plain(enum FragmentCase mode)
   } else {
     for (i = 0; i < targets; i++) lj_arena_free(&w.alloc, blocks[i], BLOCK_BYTES);
   }
+#if LJ_TARGET_LINUX && LJ_TARGET_X64
+  if (unrelated) set_run_page_access(unrelated, PROT_NONE);
+#endif
   if (mode == FRAGMENT_READER)
     assert(lj_arena_rescue_enter(target) == LJ_ARENA_RESCUE_FULL);
   if (mode == FRAGMENT_RESERVE_BUMP) {
@@ -221,6 +251,13 @@ static int test_fragmented_plain(enum FragmentCase mode)
     assert(value);
     used = lj_arena_of(value);
   }
+#if LJ_TARGET_LINUX && LJ_TARGET_X64
+  if (unrelated) {
+    set_run_page_access(unrelated, PROT_READ | PROT_WRITE);
+    exhaust_bump(&w);
+    assert(lj_arena_alloc(&w.alloc, &w.prng, LJ_CELL_SIZE, 0) == unrelated);
+  }
+#endif
   memset(value, 0xab, large);
   if (mode == FRAGMENT_READER || mode == FRAGMENT_RESERVED) {
     assert(used != target && used != guard_arena);
@@ -465,6 +502,9 @@ int main(int argc, char **argv)
   RUN("fragment-reserve-bump", test_fragmented_plain(FRAGMENT_RESERVE_BUMP));
   RUN("fragment-reader", test_fragmented_plain(FRAGMENT_READER));
   RUN("fragment-reserved", test_fragmented_plain(FRAGMENT_RESERVED));
+#if LJ_TARGET_LINUX && LJ_TARGET_X64
+  RUN("fragment-classes", test_fragmented_plain(FRAGMENT_CLASSES));
+#endif
   RUN("plain-search", test_search(0));
   RUN("traversable-search", test_search(LJ_AF_TRAVERSABLE));
   RUN("defensive-cycles", test_defensive_cycles());

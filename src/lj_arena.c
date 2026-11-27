@@ -5977,6 +5977,14 @@ static int arena_link_run_head(TGAlloc *alloc, GCArena *a, uint32_t start,
       (arena_lifetime_managed(a) &&
        lj_arena_lifetime_state_acq(a, start) != LJ_ARENA_LIFETIME_FREE))
     return 0;
+  if (k == LJ_ARENAK_PLAIN) {
+    /* Staging and owner transfer link runs through this same entry point.
+    ** Only the current structural owner can publish a node in these bins. */
+    uint32_t bit = (uint32_t)1u << b;
+    uint32_t mask = la_load32_rlx(&a->hdr.plain_binmask);
+    if (!(mask & bit))
+      la_store32_rlx(&a->hdr.plain_binmask, mask | bit);
+  }
   run->start = start;
   run->len = len;
   run->next = alloc->bins[k][b];
@@ -8894,10 +8902,12 @@ uint32_t lj_arena_alloc_transfer(TGAlloc *dst, TGAlloc *src)
 static int arena_plain_bins_cover(TGAlloc *alloc, GCArena *a)
 {
   uint64_t covered[LJ_ARENA_WORDS] = { 0 };
-  uint32_t cells = 0, b;
-  for (b = 0; b < LJ_ALLOC_NBINS; b++) {
+  uint32_t cells = 0, mask = la_load32_rlx(&a->hdr.plain_binmask);
+  while (mask) {
+    uint32_t b = lj_ffs(mask);
     LJArenaFreeRun *run;
     ArenaBinWalk walk = { NULL, 0, 0 };
+    mask &= mask - 1u;
     for (run = alloc->bins[LJ_ARENAK_PLAIN][b]; run; run = run->next) {
       uint32_t start, len;
       GCArena *owner;
@@ -8929,12 +8939,14 @@ static int arena_plain_bins_cover(TGAlloc *alloc, GCArena *a)
 
 static void arena_plain_unlink_runs(TGAlloc *alloc, GCArena *a)
 {
-  uint32_t b;
-  /* The complete chain was validated before the first mutation. Only this
+  uint32_t mask = la_load32_rlx(&a->hdr.plain_binmask);
+  /* Each listed chain was validated before the first mutation. Only this
   ** allocator owner changes its free-run links. The mapping stays on its
   ** original owned list and in the shared arena directory. */
-  for (b = 0; b < LJ_ALLOC_NBINS; b++) {
+  while (mask) {
+    uint32_t b = lj_ffs(mask);
     LJArenaFreeRun **link = &alloc->bins[LJ_ARENAK_PLAIN][b];
+    mask &= mask - 1u;
     while (*link) {
       LJArenaFreeRun *run = *link;
       if (lj_arena_of(run) == a)
@@ -8944,6 +8956,7 @@ static void arena_plain_unlink_runs(TGAlloc *alloc, GCArena *a)
     }
     arena_refresh_binmask(alloc, LJ_ARENAK_PLAIN, b);
   }
+  la_store32_rlx(&a->hdr.plain_binmask, 0);
 }
 
 static GCArena *arena_plain_reuse_empty(TGAlloc *alloc)

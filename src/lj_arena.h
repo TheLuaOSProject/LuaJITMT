@@ -204,9 +204,12 @@ typedef struct GCAhdr {
   /* Terminal unmap closure. Published before the remote_active terminal CAS;
   ** rescue admission rechecks it after any losing CAS retry. */
   uint32_t terminal_closed;
-  /* Huge allocations have no external cell sidecar. This tail is initialized
-  ** before mapping publication and remains allocation-local until unmap. */
-  LJGC2TabStamp huge_tabstamp;
+  union {
+    LJGC2TabStamp huge_tabstamp;  /* Huge mappings have no cell sidecar. */
+    /* Small PLAIN mappings remember each size class that received a free run
+    ** since the last complete unlink. A set bit can outlive the run. */
+    uint32_t plain_binmask;
+  };
   /* Stable global table-rescan authority. Published before progress_g and
   ** never rebound to a different global while the mapping is reachable. */
   LJGC2TableDesc *gc2_tabledesc;
