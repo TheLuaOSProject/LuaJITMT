@@ -136,3 +136,32 @@ The number already unlinked and awaiting grace fell to zero in all four.
 An executing arithmetic sentinel gave a different result. With JIT enabled
 the collector stayed in SWEEP and both pool sizes retained 384 dead groups
 until the sentinel exited. [Automatic baseline and candidate measurements](evidence/worker-retention-2026-11-27/automatic-counts.csv).
+
+## Automatic collection with an executing native peer
+
+Each 96-wave run started four workers per wave, checked every join, and
+verified four retained results until their explicit release. The main thread
+only allocated during the measured interval. The sentinel kept computing.
+On the baseline it retained 384 dead groups at both pool sizes. Separate
+16-wave observations found SWEEP still active after all results were dropped.
+
+With the SWEEP change in `7396408ce`, the collector can finish the sweep
+after yielding a turn to native code. The collector keeps priority once the
+rescue work from such a turn consumes a whole batch. At the settled
+checkpoint the sentinel was still running and the retirement grace queue
+was empty in both runs.
+
+| GC workers | Baseline heap (KiB) | Fixed heap (KiB) | Fixed dead groups | Completed sweeps at checkpoint |
+| ---: | ---: | ---: | ---: | ---: |
+| 0 | 90,356.3 | 1,019.0 | 1 | 272 |
+| 2 | 90,356.2 | 1,158.7 | 2 | 284 |
+
+The 96-wave baseline used `de06f6697`. The measured fix was
+`ca4c342e6`, integrated as `a4ee560c2`. The CSV includes all wave
+observations. Empty fields identify counters added to the observer after
+the baseline measurement. To repeat the measurement, use the compiler
+command above with `active-census.c` and run the executable with
+`CENSUS_JIT=on`, `WAVES=96`, and `active-census.lua`.
+[Census data](evidence/worker-retention-2026-11-27/active-counts.csv),
+[observer](evidence/worker-retention-2026-11-27/active-census.c),
+[Lua workload](evidence/worker-retention-2026-11-27/active-census.lua).

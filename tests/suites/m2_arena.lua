@@ -140,6 +140,8 @@ return function(add)
         for _, jit_mode in ipairs({ "off", "on" }) do
           t:run({ auto }, { env = { POOL = pool, JIT = jit_mode }, timeout = "60s" })
         end
+        t:run({ auto }, { env = { POOL = pool, JIT = "on", SPIN = "1" },
+                          timeout = "60s" })
       end
       for _, name in ipairs({ "t-arena-dead-plain", "t-tg-dead-empty-live" }) do
         local out = t:tmp(name)
