@@ -56,6 +56,7 @@ typedef int (*GC2FinalizerDispatchFunc)(lua_State *L, global_State *g,
 #define GC2_WEAK_LIMIT	((MSize)(LJ_MAX_MEM32 / sizeof(GCRef)))
 #define GC2_FINCLAIM_FIXED	4096u
 #define GC2_ACTIVE_FINALIZE_COST	100
+#define GC2_MAX_STEP_BUDGET	(1u << 20)
 #define GC2_RECOVERY_LANES	3u
 #define GC2_RECOVERY_LANE_BITS	2u
 #define GC2_RECOVERY_LANE_MASK	((1u << GC2_RECOVERY_LANE_BITS) - 1u)
@@ -3107,11 +3108,13 @@ int lj_gc2_collect_active(lua_State *L)
   ** returns. This is not only a same-owner recursion hazard: a finalizer may
   ** join a pre-existing peer which concurrently calls collectgarbage(). If
   ** that peer waits for finalizer_active, each TG waits for the other forever.
-  ** Treat every active finalizer as an asynchronous full-collection deferral;
-  ** the outer collector or a later request resumes the already-open cycle.
+  ** The callback owner can still dispatch the pending FIFO. The outer
+  ** collector or a later request resumes the already-open cycle.
   */
-  if (gc2_finalizer_active_acq(g) != 0)
+  if (gc2_finalizer_active_acq(g) != 0) {
+    (void)lj_gc2_step_owned_finalizers(L, UINT32_MAX);
     return 0;
+  }
   /* A sticky classification failure deliberately has no synthetic queue
   ** identity. Once all real identities drain, full collection must return
   ** fail-closed instead of self-waiting forever for impossible work. */
@@ -3289,8 +3292,8 @@ static int gc2_step(lua_State *L, uint32_t budget, uint32_t sweep_limit)
   gc2_finreg_udata_drain(g);
   if (budget == 0)
     budget = 1;
-  if (budget > (1u << 20))
-    budget = (1u << 20);
+  if (budget > GC2_MAX_STEP_BUDGET)
+    budget = GC2_MAX_STEP_BUDGET;
   while (budget-- != 0) {
     uint32_t phase = gc2_phase_acq(g);
     if (gc2_collection_stalled(g) ||
@@ -3443,6 +3446,24 @@ static int gc2_step(lua_State *L, uint32_t budget, uint32_t sweep_limit)
 int lj_gc2_step_explicit(lua_State *L, uint32_t budget)
 {
   return gc2_step(L, budget, LJ_GC2_SWEEP_BATCH);
+}
+
+int lj_gc2_step_owned_finalizers(lua_State *L, uint32_t budget)
+{
+  TGState *tg;
+  if (!lj_gc2_finalizer_owned_by_current(G(L)))
+    return 0;
+  /* The outer callback pins its object and owns the FIFO. Its nested request
+  ** can deliver other queued callbacks while SWEEP and its string-retirement
+  ** scope remain with the outer collector. */
+  tg = L2TG(L);
+  if (budget != UINT32_MAX && budget > GC2_MAX_STEP_BUDGET)
+    budget = GC2_MAX_STEP_BUDGET;
+  while (budget-- && !lj_tg_flags_test_acq(tg, TGF_STOPREQ_FRESH)) {
+    if (lj_gc2_finalizer_step(L, GC2_ACTIVE_FINALIZE_COST, NULL) <= 0)
+      break;
+  }
+  return 1;
 }
 
 int lj_gc2_step_automatic(lua_State *L, uint32_t sweep_limit)

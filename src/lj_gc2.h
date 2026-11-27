@@ -302,6 +302,7 @@ LJ_FUNC int lj_gc2_request_cycle_explicit(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_request_major(global_State *g, TGState *tg);
 LJ_FUNC int lj_gc2_collect_active(lua_State *L);
 LJ_FUNC int lj_gc2_step_explicit(lua_State *L, uint32_t budget);
+LJ_FUNC int lj_gc2_step_owned_finalizers(lua_State *L, uint32_t budget);
 LJ_FUNC void lj_gc2_clear_unused_call_slots(lua_State *L);
 LJ_FUNC int lj_gc2_step_automatic(lua_State *L, uint32_t sweep_limit);
 LJ_FUNC int lj_gc2_resumable_epoch_continue(global_State *g);

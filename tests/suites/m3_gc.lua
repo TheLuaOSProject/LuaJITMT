@@ -616,7 +616,8 @@ return function(add)
           end
         end
       end
-      for _, script in ipairs({ "t-m8-finalizer-spawn-live.lua",
+      for _, script in ipairs({ "t-gc-reentrant-finalizers.lua",
+                                "t-m8-finalizer-spawn-live.lua",
                                 "t-finalizer-spawn-query-enabled.lua" }) do
         run_luajit_script_jit_modes(t, script, nil, {
           env = env, timeout = "40s"

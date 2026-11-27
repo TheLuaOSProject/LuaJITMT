@@ -3797,7 +3797,11 @@ LUA_API int lua_gc(lua_State *L, int what, int data)
       api_gc_setlogical(g, api_gc_restart_threshold(g), 0);
     {
       uint32_t budget = data > 0 ? (uint32_t)data : 1u;
-      int scope = lj_str_gc2_reclaim_request(g, LJ_STR_RECLAIM_STEP);
+      int scope;
+      if (LJ_UNLIKELY(gc2_finalizer_active_acq(g)) &&
+          lj_gc2_step_owned_finalizers(L, budget))
+        break;
+      scope = lj_str_gc2_reclaim_request(g, LJ_STR_RECLAIM_STEP);
       if (scope > 0) {
 	ApiGCStep step = { budget, 0 };
 	int errcode = lj_vm_cpcall(L, NULL, &step, api_gc_step_cp);
