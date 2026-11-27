@@ -6,6 +6,17 @@ Compatibility covers the documented Lua language and libraries, the public C API
 
 Prioritize stability, storage lifetime and bounded physical memory, then improve performance without weakening those guarantees. Focus current work on Linux x64; defer Windows and macOS validation until a release candidate is ready.
 
+## Current release work
+
+| Area | Verified on Linux x64 | Remaining acceptance |
+| --- | --- | --- |
+| Public compatibility | 509 stock JIT source cases, 387 eligible interpreter cases, and 509 cases loaded from independently produced stock bytecode pass in four builds. The native ABI, callback and host allocator gates cover additional embedding behavior. | Run the combined suite on the final revision and keep production traces observable in the shared JIT cases. |
+| Collector and lifetime | Automatic collection with a running native peer reclaims detached workers. A live allocator reuses fragmented space and preserves borrowed and reserved bytes. | Resolve intermittent mixed-workload finalizer delays and the teardown abort seen after two 1,920-wave allocation runs. Repeat hour-scale checks with both pool sizes and both JIT modes. |
+| Progress | Tests cover retained readers, scalar table operations with a stalled collector, table resize assistance, native SWEEP progress, and worker shutdown. | Extend stalled-actor coverage to remaining shared paths and validate sustained allocation alongside native traces. |
+| Performance | The latest full-scale pinned comparison measured 1.252× stock CPU time across 15 cases. | Reach at most 1.10× on the same build and core setup, then verify worker scaling and report per-case outliers. |
+
+[Stock timings](../notes/evidence/x64-stock-parity-2026-11-27/jit-comparison.csv), [worker census](../notes/worker-retention-2026-11-26.md), [live allocator census](../notes/plain-storage-reuse-2026-11-26.md#live-owner-with-fragmented-free-space-on-2026-11-27).
+
 ## Release blockers identified on 2026-11-27
 
 | Work | Acceptance |

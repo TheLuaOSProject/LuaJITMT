@@ -110,3 +110,59 @@ then extend physical-memory measurements to active workers, ownership transfer
 and repeated detach. Large-bin search and publication overhead also remain
 performance work. Windows and macOS validation stay deferred until a release
 candidate is ready.
+
+## Live owner with fragmented free space on 2026-11-27
+
+One physical owner allocated 96 buffers per phase in four sizes. A channel
+peer released alternate phases. The workload compared the contents of 16
+retained buffers after every wave and kept the peer attached until the last
+census. A second workload reset, wrote and consumed the same 1 KiB buffer
+5,000 times per wave. Both used ordinary GC pacing during measurement.
+
+Every mapping in the table is a 64 KiB PLAIN arena owned by the main
+allocator. The counts include the arenas containing the remaining live
+allocations. At 960 waves the mixed baseline had 481 and 434 completely
+empty arenas with zero late starts. The change brought those counts down to
+21 and 36. The refill workload had zero completely empty arenas in both
+candidate runs.
+
+| Workload | Waves | Baseline mapped, pool 0 / JIT off | Fixed mapped, pool 0 / JIT off | Baseline mapped, pool 2 / JIT on | Fixed mapped, pool 2 / JIT on |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Mixed | 48 | 37 | 34 | 36 | 30 |
+| Mixed | 240 | 132 | 41 | 123 | 55 |
+| Mixed | 960 | 520 | 43 | 478 | 80 |
+| Refill | 960 | 76 | 6 | 77 | 9 |
+
+At 1,920 mixed waves with pool 0 the baseline mapped 1,057 arenas and
+the candidate mapped 44. Separate 3,840-wave candidate runs finished with
+45 and 107 mappings. At 1,920 waves with pool 2, both initial runs reached
+the final census and then aborted during teardown. Their recorded exit codes
+accompany those samples. The measurements establish reuse under the tested
+allocation patterns. Fragmentation can still keep live arenas mapped.
+[Measurements](evidence/live-plain-reuse-2026-11-27/counts.csv).
+
+When the allocator needs another arena, it can reuse an owned one if
+every payload cell already belongs to an indexed free run. It first closes
+new admissions and checks the allocator's reader counts, pending frees,
+side metadata and complete nonoverlapping free-run coverage. A reader can
+keep its arena while a new allocation proceeds elsewhere. A reservation
+that has yet to publish its block bit also keeps its bytes. The tests cover
+local release, a remote pthread producer, held readers, an unpublished
+reservation, and a new reservation drawn from the coalesced arena.
+[Allocator regression](../tests/t-arena-bin-capacity.c).
+
+To reproduce the census, compile the observer against the corresponding
+static runtime. The CSV includes the start, the first wave, every 48th wave,
+and both settled observations. The `occupied` column counts allocated block
+starts. The `fully_empty` column requires both block and deferred-free maps
+to be empty. [Observer](evidence/live-plain-reuse-2026-11-27/census.c),
+[workload](evidence/live-plain-reuse-2026-11-27/workload.lua).
+
+```sh
+evidence=notes/evidence/live-plain-reuse-2026-11-27
+checks='-DLUA_USE_ASSERT -DLUA_USE_APICHECK -DLJ_GC2_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS -DLJ_TAB_TEST_HELPERS'
+make -C src BUILDMODE=static CC=gcc XCFLAGS="$checks"
+gcc -O2 -mcx16 $checks -Isrc -Itests "$evidence/census.c" \
+  src/libluajit.a -lm -ldl -pthread -o /tmp/lj-live-plain-census
+WAVES=960 WORKLOAD=mixed JIT=on POOL=2 /tmp/lj-live-plain-census "$evidence/workload.lua"
+```
