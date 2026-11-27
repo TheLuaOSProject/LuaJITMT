@@ -1,0 +1,17 @@
+workload,stock_ns_op,fork_ns_op,ratio
+arith_loop,0.34,0.35,1.0294
+fib30,4.576e+06,7.084e+06,1.5481
+tab_hash_write,16.31,24.55,1.5052
+tab_store_existing,1.06,1.23,1.1604
+tab_insert_newkey,73.34,1060.68,14.4625
+tab_hash_read,14.65,16.03,1.0942
+tab_read_existing,1.01,1.14,1.1287
+tab_array,1.34,1.36,1.0149
+alloc_tables,0.33,0.35,1.0606
+string_intern,48.95,4.29,0.0876
+closures_upval,34.58,675.89,19.5457
+upval_hot,0.33,0.4,1.2121
+ffi_struct,0.35,0.4,1.1429
+coroutine_switch,23.13,62.78,2.7142
+sbuf_format,51.18,4.33,0.0846
+geomean,,,1.2521

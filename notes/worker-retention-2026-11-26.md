@@ -91,3 +91,48 @@ preserve commands, source and executable identities, all checkpoints and the
 proposed reclamation boundaries. No worker-reclamation runtime change is
 included in this diagnostic. Windows and macOS remain deferred until release
 readiness.
+
+## Follow-up on 2026-11-27
+
+The [new census](evidence/worker-retention-2026-11-27/counts.csv) measures
+the worker-control revision `433fe7bf2`, integrated as `bb0dacb44`. Four
+workers per wave each refill and read a 1 KiB buffer 2,000 times. The
+first wave's four results stay reachable and are checked after every
+subsequent wave. A separate worker stays parked through the final sample.
+The C observer takes an SMR read admission, reads the plain arena bitmaps
+and checks whether the retired-record queue is empty.
+
+| Background collectors | JIT | Peak dead groups after collection, waves 16–96 | Dead groups after releasing results | Remaining plain arenas in dead groups |
+| ---: | --- | ---: | ---: | ---: |
+| 0 | Off | 9 | 1 | 0 |
+| 0 | On | 9 | 3 | 2 |
+| 2 | Off | 9 | 1 | 0 |
+| 2 | On | 9 | 2 | 1 |
+
+The peak includes groups already unlinked and awaiting a grace period.
+Every settled sample had zero empty dead-owner plain arenas, zero unlinked
+groups awaiting a grace period, and an empty retired-record queue. These
+measurements use explicit full collections.
+
+Build the observation-only executable with the same definitions as the
+runtime. Run the four combinations by changing `POOL` and `CENSUS_JIT`.
+The CSV records each sample before and after the three collections per wave.
+
+```sh
+evidence=notes/evidence/worker-retention-2026-11-27
+checks='-DLUA_USE_ASSERT -DLJ_GC2_TEST_HELPERS -DLJ_ARENA_TEST_HELPERS'
+make -C src BUILDMODE=static XCFLAGS="$checks"
+cc -std=gnu11 -O2 -mcx16 $checks -Isrc -Itests "$evidence/reap-census.c" \
+  src/libluajit.a -Wl,-E -lm -ldl -pthread -o /tmp/lj-worker-census
+POOL=2 CENSUS_JIT=on taskset -c 16-23 /tmp/lj-worker-census "$evidence/workload.lua"
+```
+
+The [automatic workload](evidence/worker-retention-2026-11-27/automatic-workload.lua)
+uses allocation pressure with the same parked sentinel. With explicit
+collection omitted through measurement, the baseline retained 384 dead
+groups in every configuration. The dispatch checkpoint change in
+`de06f6697` left 0, 1, 1 and 2 respectively, in the same table order.
+The number already unlinked and awaiting grace fell to zero in all four.
+An executing arithmetic sentinel gave a different result. With JIT enabled
+the collector stayed in SWEEP and both pool sizes retained 384 dead groups
+until the sentinel exited. [Automatic baseline and candidate measurements](evidence/worker-retention-2026-11-27/automatic-counts.csv).
