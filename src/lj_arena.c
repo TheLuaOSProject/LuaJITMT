@@ -6211,7 +6211,7 @@ int lj_arena_remote_plain_free(void *p, size_t size)
 {
   GCArena *a;
   uint32_t *wake;
-  if (!p || !size || size > LJ_HUGE_THRESHOLD)
+  if (!p || !size || size > LJ_HUGE_THRESHOLD || lj_arena_ishuge_base(p))
     return 0;
   a = lj_arena_of(p);
   if (!la_loadptr_acq((void *const *)&a->hdr.plain_free_wake) ||

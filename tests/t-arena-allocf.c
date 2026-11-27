@@ -156,6 +156,7 @@ int main(void)
     assert(lj_arena_allocf(&ad, huge2, 128, 0) == NULL);
     assert(lj_arena_free_deferred(&alloc, huge2, 128) == 0);
     assert(lj_arena_remote_free_publish(&alloc, huge2, 128) == 0);
+    assert(lj_arena_remote_plain_free(huge2, 128) == 0);
     assert(lj_arena_allocf(&ad, huge2, 128, 64) == NULL);
     assert(lj_arena_allocf(&ad, huge2, 128, hsize) == NULL);
 
