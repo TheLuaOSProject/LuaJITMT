@@ -11754,8 +11754,11 @@ static TraceAbortResult trace_abort(jit_State *J)
     e = LJ_TRERR_RETRY;
     setintV(L->top-1, (int32_t)e);
   }
-  /* Penalize or blacklist starting bytecode instruction. */
-  if (J->parent == 0 && !bc_isret(bc_op(J->cur.startins))) {
+  /* A collector may abort before record_setup has bound the bytecode PC.
+  ** Only a current, initialized attempt owns a hotcount or a self-link. */
+  traceno = J->cur.traceno;
+  if (traceno && mref(J->cur.startpc, BCIns) != NULL && J->parent == 0 &&
+      !bc_isret(bc_op(J->cur.startins))) {
     if (J->exitno == 0) {
       BCIns *startpc = mref(J->cur.startpc, BCIns);
       if (e == LJ_TRERR_RETRY || e == LJ_TRERR_SMRRETRY)
@@ -11780,7 +11783,6 @@ static TraceAbortResult trace_abort(jit_State *J)
   }
 
   /* Is there anything to abort? */
-  traceno = J->cur.traceno;
   if (traceno) {
     J->cur.link = 0;
     J->cur.linktype = LJ_TRLINK_NONE;

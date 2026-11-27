@@ -133,6 +133,14 @@ return function(add)
       build.build_default(t)
       build.run_c_fixtures(t, { "t-arena-foreign-grow", "t-thread-live-slots" },
                            { timeout = "30s" })
+      local auto = t:tmp("t-tg-auto-reap")
+      t:cc(auto, { t:path("tests", "t-tg-auto-reap.c") },
+           { link_luajit = true, libs = { "-lm", "-ldl", "-pthread" } })
+      for _, pool in ipairs({ "0", "2" }) do
+        for _, jit_mode in ipairs({ "off", "on" }) do
+          t:run({ auto }, { env = { POOL = pool, JIT = jit_mode }, timeout = "60s" })
+        end
+      end
       for _, name in ipairs({ "t-arena-dead-plain", "t-tg-dead-empty-live" }) do
         local out = t:tmp(name)
         local opts = { env = { POOL = "0" }, timeout = "30s",
@@ -141,7 +149,10 @@ return function(add)
         t:run({ out }, { env = { POOL = "2" }, timeout = "30s" })
         if name == "t-tg-dead-empty-live" then
           for _, pool in ipairs({ "0", "2" }) do
-            t:run({ out }, { env = { POOL = pool, SPIN = "1" }, timeout = "30s" })
+            for _, jit_mode in ipairs({ "off", "on" }) do
+              t:run({ out }, { env = { POOL = pool, SPIN = "1", JIT = jit_mode },
+                               timeout = "30s" })
+            end
           end
         end
       end
