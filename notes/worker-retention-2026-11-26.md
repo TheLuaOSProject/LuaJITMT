@@ -165,3 +165,39 @@ command above with `active-census.c` and run the executable with
 [Census data](evidence/worker-retention-2026-11-27/active-counts.csv),
 [observer](evidence/worker-retention-2026-11-27/active-census.c),
 [Lua workload](evidence/worker-retention-2026-11-27/active-census.lua).
+
+## Draining published work during SWEEP
+
+On 2026-11-27 a single mutator reading 256 reachable tables through
+`lua_rawgeti` reproduced an unnecessary handshake. One SWEEP turn advanced
+the handshake epoch from 7 to 8 with 269 grey entries already queued. At
+`33e16dd21` the collector drains published buffers, grey entries and recovery
+work before asking every mutator to flush a private buffer. The existing
+checks for completion still cover work arriving during the drain.
+[Public table-read regression](../tests/t-gc2-sweep-quantum.c).
+
+Twenty fresh processes per revision and CPU set ran with two background
+collectors and JIT enabled. The main thread joined 48 workers, retained the
+first worker's buffer and churned allocations with a live sentinel. The first
+census followed the fixture's usual 12 sleep-and-allocation intervals. A
+process above the limit of 16 detached or pending groups continued the same
+2 ms sleep and allocation loop for up to five seconds. Retirement also
+required a completed sweep and a published unlink epoch. The two revisions
+alternated order. The three CPU sets ran concurrently on a shared host.
+
+| Sentinel and CPUs | Revision | Met at first census | Met within five more seconds | Median handshake epochs | Median completed sweeps |
+| --- | --- | ---: | ---: | ---: | ---: |
+| Native, 2 CPUs | `a02525340` | 2/20 | 6/20 | 4,414 | 3 |
+| Native, 2 CPUs | `33e16dd21` | 6/20 | 17/20 | 1,133 | 9 |
+| Native, 6 CPUs | `a02525340` | 5/20 | 10/20 | 2,876 | 8 |
+| Native, 6 CPUs | `33e16dd21` | 14/20 | 20/20 | 853 | 11 |
+| Parked, 6 CPUs | `a02525340` | 20/20 | 20/20 | 1,762.5 | 14 |
+| Parked, 6 CPUs | `33e16dd21` | 20/20 | 20/20 | 1,724.5 | 13 |
+
+The medians use processes with both counter samples. Five baseline processes
+missed native entry during setup. One candidate process timed out acquiring
+the initial census. Two other candidate processes on two CPUs retained 48
+groups at five seconds. All three are included in the denominator. The
+production gate continues to use its original sampling interval.
+[Per-process observations](evidence/worker-retention-2026-11-27/sweep-flush-trials.csv),
+[allocation workload and census](../tests/t-tg-auto-reap.c).
