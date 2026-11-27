@@ -1,0 +1,7 @@
+revision,threads,width,actor_allocs,actor_bytes,actor_frees,signal_allocs,signal_bytes,signal_frees
+b5c2a1453,4096,1,4096,98304,0,4096,163840,0
+state-local-task,4096,1,0,0,0,4096,163840,0
+b5c2a1453,4096,8,4096,98304,0,4096,163840,0
+state-local-task,4096,8,0,0,0,4096,163840,0
+b5c2a1453,4096,32,4096,98304,0,4096,163840,0
+state-local-task,4096,32,0,0,0,4096,163840,0

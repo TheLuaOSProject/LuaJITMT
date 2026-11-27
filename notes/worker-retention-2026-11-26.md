@@ -201,3 +201,25 @@ groups at five seconds. All three are included in the denominator. The
 production gate continues to use its original sampling interval.
 [Per-process observations](evidence/worker-retention-2026-11-27/sweep-flush-trials.csv),
 [allocation workload and census](../tests/t-tg-auto-reap.c).
+
+## Native thread registration
+
+At `b5c2a1453`, 4,096 fresh pthreads retained 98,304 bytes of physical
+actor records after joining. Only main-state close used these records to look
+up a native task. Each main state now keeps its own actor, process ID and
+Linux TID in one atomic snapshot. The owner refreshes that snapshot on
+transfer. Registering the same 4,096 actors allocated zero bytes.
+
+The census wrapped malloc and free around actor registration and around a
+separate profiler bind, signal lookup and unbind on each pthread. Running in
+batches of 1, 8 and 32 produced the same counts at each width. Both revisions
+retained 4,096 separate profiler signal cells, or 163,840 bytes per process.
+[Allocation counts](evidence/worker-retention-2026-11-27/actor-cells.csv).
+
+Under malloc refusal the previous carrier failed in all 15 samples. All 70
+candidate samples registered 32 actors each. The moved-close regression also
+passed 600 times across GCC, assertions, ASan, UBSan and TSan. It covers
+the original creator, a final owner that exits after an intervening transfer,
+and a late pthread destructor that still reads Lua data before exit.
+[Actor registration test](../tests/t-state-actor-carrier.c),
+[moved-close test](../tests/t-m8-close-moved-state.c).

@@ -378,8 +378,13 @@ LJ_FUNC int lj_thr_tg_signal_prepare_current(TGState *expected_tg);
 LJ_FUNC int lj_thr_tg_signal_process_snapshot(uint64_t *generation,
                                                uint32_t *advanced);
 LJ_FUNCA TGState *lj_thr_get_tg_fallback(global_State *g);
+#if LJ_TARGET_LINUX
+LJ_FUNC void lj_thr_main_task_bind(global_State *g);
+#else
+#define lj_thr_main_task_bind(g) ((void)(g))
+#endif
 /* Main-state close arbitration accepts the owning actor, an explicit actor-0
-** handoff, or (on Linux) a quiescent actor proven dead by its stable record and
+** handoff, or (on Linux) a quiescent actor proven dead by its state-local
 ** kernel task-lifetime witness. Stock live-yet-quiescent cross-thread close
 ** still lacks a public remotely invalidatable carrier/handoff and remains a
 ** b1.2.1 compatibility blocker; macOS/Windows exited actors fail closed too. */

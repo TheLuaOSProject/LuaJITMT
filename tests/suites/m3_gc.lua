@@ -119,9 +119,14 @@ return function(add)
       local flags = gc2_test_cflags .. " -DLUA_USE_ASSERT"
       build.with_default_build_restore(t, function()
         build.clean_build(t, { quiet = true, xcflags = flags })
+        local fixture_flags, libs = flags, nil
+        if jit.os == "Linux" then
+          fixture_flags = flags .. " -DLJ_TEST_ACTOR_NO_MALLOC"
+          libs = { "-lm", "-ldl", "-pthread", "-Wl,--wrap=malloc" }
+        end
         compile_and_run_c(t, t:tmp("lj-t-state-actor-carrier"),
                           "t-state-actor-carrier.c", {
-          cflags = flags,
+          cflags = fixture_flags, libs = libs,
           timeout = "20s"
         })
       end)

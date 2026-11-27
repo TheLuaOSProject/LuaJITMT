@@ -29,6 +29,7 @@ typedef struct CloseCtx {
   int closed;
 #if LJ_TARGET_LINUX
   int late;
+  uint32_t relay_actor;
   unsigned int dtor_round;
   uint32_t in_destructor, may_return;
 #endif
@@ -105,11 +106,20 @@ static void install_close_finalizer(lua_State *L)
 #if LJ_TARGET_LINUX
 static pthread_key_t late_key;
 
+static void *claim_and_exit(void *arg)
+{
+  CloseCtx *ctx = (CloseCtx *)arg;
+  assert(lj_thr_main_close_claim(ctx->L));
+  ctx->relay_actor = lj_thr_actor_current();
+  assert(ctx->relay_actor != ctx->creator_actor);
+  return NULL;
+}
+
 static void late_destructor(void *arg)
 {
   CloseCtx *ctx = (CloseCtx *)arg;
   if (ctx->dtor_round++ == 0) {
-    /* Run again after every key's first destructor, including the VM's. */
+    /* Run again after the first round of pthread-specific destructors. */
     assert(pthread_setspecific(late_key, ctx) == 0);
     return;
   }
@@ -148,20 +158,12 @@ static void *create_on_departing_thread(void *arg)
   assert(prctl(PR_SET_NAME, "Lua) R 1)\n 4 (") == 0);
   if (ctx->late)
     assert(pthread_setspecific(late_key, ctx) == 0);
-#endif
-
-#if !LJ_TARGET_LINUX
+  /* Leave the raw binding and physical actor intact for moved close. */
+#else
   /* macOS and Windows deliberately fail closed for an exited actor until their
   ** carrier has a kernel-backed death witness. Preserve the portable moved
   ** close contract through the explicit quiescent handoff on those targets. */
   assert(lj_thr_tg_handoff_current(G(L)->main_tg));
-#endif
-
-#if LJ_TARGET_LINUX
-  /* Intentionally return with both the raw compatibility binding and TG actor
-  ** untouched. Teardown updates only the never-freed actor-record hint, while
-  ** kernel task termination supplies final authority; this path invokes no
-  ** private carrier handoff or raw-unbind operation. */
 #endif
   return NULL;
 }
@@ -179,7 +181,9 @@ static void *close_on_unbound_thread(void *arg)
   return NULL;
 }
 
-static void check_close(int late, int joiner_closes)
+enum CloseRoute { NEW_CLOSER, JOINER_CLOSES, RELAY_CLOSES };
+
+static void check_close(int late, enum CloseRoute route)
 {
   CloseCtx ctx;
   pthread_t creator, closer;
@@ -215,7 +219,14 @@ static void check_close(int late, int joiner_closes)
 #endif
   assert(lj_thr_get_tg() == NULL);
 
-  if (joiner_closes) {
+#if LJ_TARGET_LINUX
+  if (route == RELAY_CLOSES) {
+    assert(pthread_create(&closer, NULL, claim_and_exit, &ctx) == 0);
+    assert(pthread_join(closer, NULL) == 0);
+    assert(lj_tg_actor_acq(G(ctx.L)->main_tg) == ctx.relay_actor);
+  }
+#endif
+  if (route != NEW_CLOSER) {
     close_on_unbound_thread(&ctx);
   } else {
     assert(pthread_create(&closer, NULL, close_on_unbound_thread, &ctx) == 0);
@@ -229,10 +240,11 @@ static void check_close(int late, int joiner_closes)
 
 int main(void)
 {
-  check_close(0, 0);
+  check_close(0, NEW_CLOSER);
 #if LJ_TARGET_LINUX
   assert(pthread_key_create(&late_key, late_destructor) == 0);
-  check_close(1, 1);
+  check_close(1, JOINER_CLOSES);
+  check_close(0, RELAY_CLOSES);
   assert(pthread_key_delete(late_key) == 0);
 #endif
   printf("t-m8-close-moved-state OK: moved close preserved GC-valued "

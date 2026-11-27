@@ -8,6 +8,7 @@
 
 #include "lj_obj.h"
 #include "lj_atomic.h"
+#include "lj_dispatch.h"
 #include "lj_gc2.h"
 #include "lj_safepoint.h"
 #include "lj_state.h"
@@ -141,33 +142,6 @@ static LJ_TLS uint32_t lj_tls_actor_id;
 #endif
 static uint32_t lj_thr_next_tid;
 static uint32_t lj_thr_next_actor;
-
-#if !LJ_TARGET_WINDOWS
-/* Actor records are process-lifetime identity nodes. The destructor-cleared
-** live bit is the sole mutable field and only gates the stable Linux kernel
-** death query; it is not authority by itself. Teardown never touches a TG or
-** Lua universe. Nodes are deliberately never reclaimed: actor ids are never
-** reused, and close-time lookup must remain valid after the originating
-** pthread and its TLS storage have disappeared. */
-typedef struct LJThrActorRecord {
-  struct LJThrActorRecord *next;
-  uint32_t actor_id;
-  uint32_t live;
-#if LJ_TARGET_LINUX
-  uint32_t process_id;
-  uint32_t native_tid;
-#endif
-} LJThrActorRecord;
-
-#define LJ_THR_ACTOR_KEY_EMPTY 0u
-#define LJ_THR_ACTOR_KEY_BUILDING 1u
-#define LJ_THR_ACTOR_KEY_READY 2u
-#define LJ_THR_ACTOR_KEY_DEAD 3u
-
-static LJThrActorRecord *lj_thr_actor_records;
-static pthread_key_t lj_thr_actor_key;
-static uint32_t lj_thr_actor_key_state;
-#endif
 
 #if LJ_THR_TG_SIGNAL_CACHE
 /* Immutable hash nodes are never reclaimed. A signal handler snapshots one
@@ -892,83 +866,11 @@ static uint32_t lj_thr_actor_newid(void)
   return lj_thr_id_alloc(&lj_thr_next_actor);
 }
 
-#if !LJ_TARGET_WINDOWS
-static void lj_thr_actor_record_destructor(void *ptr)
-{
-  LJThrActorRecord *record = (LJThrActorRecord *)ptr;
-  if (record)
-    la_store32_rel(&record->live, 0);
-}
-
-static int lj_thr_actor_key_ensure(void)
-{
-  int saved_errno = errno;
-  for (;;) {
-    uint32_t state = la_load32_acq(&lj_thr_actor_key_state);
-    if (state == LJ_THR_ACTOR_KEY_READY) {
-      errno = saved_errno;
-      return 1;
-    }
-    if (state == LJ_THR_ACTOR_KEY_DEAD) {
-      errno = saved_errno;
-      return 0;
-    }
-    if (state == LJ_THR_ACTOR_KEY_EMPTY) {
-      uint32_t expected = LJ_THR_ACTOR_KEY_EMPTY;
-      if (la_cas32(&lj_thr_actor_key_state, &expected,
-                   LJ_THR_ACTOR_KEY_BUILDING, LA_ACQ_REL, LA_ACQ)) {
-        int rc = pthread_key_create(&lj_thr_actor_key,
-                                    lj_thr_actor_record_destructor);
-        la_store32_rel(&lj_thr_actor_key_state,
-                       rc == 0 ? LJ_THR_ACTOR_KEY_READY :
-                                 LJ_THR_ACTOR_KEY_EMPTY);
-        errno = saved_errno;
-        return rc == 0;
-      }
-      continue;
-    }
-    (void)sched_yield();
-  }
-}
-
-static LJThrActorRecord *lj_thr_actor_record_new(uint32_t actor)
-{
-  LJThrActorRecord *record, *head;
-  int saved_errno = errno;
-#if LJ_TARGET_LINUX
-  pid_t process = getpid();
-  long native_tid = syscall(SYS_gettid);
-  if (process <= 0 || native_tid <= 0 ||
-      (uint64_t)native_tid > UINT32_MAX) {
-    errno = saved_errno;
-    return NULL;
-  }
-#endif
-  record = (LJThrActorRecord *)malloc(sizeof(*record));
-  if (!record) {
-    errno = saved_errno;
-    return NULL;
-  }
-  record->actor_id = actor;
-  la_store32_rlx(&record->live, 1);
-#if LJ_TARGET_LINUX
-  record->process_id = (uint32_t)process;
-  record->native_tid = (uint32_t)native_tid;
-#endif
-  head = (LJThrActorRecord *)
-    la_loadptr_acq((void *const *)&lj_thr_actor_records);
-  do {
-    record->next = head;
-  } while (!la_casptr((void **)&lj_thr_actor_records, (void **)&head, record,
-                      LA_REL, LA_ACQ));
-  errno = saved_errno;
-  return record;
-}
-
 #if LJ_TARGET_LINUX
 /* Linux wakes CLONE_CHILD_CLEARTID joiners before removing the native TID.
 ** PF_EXITING is set in do_exit() before that wake, after the last opportunity
-** to execute a userspace destructor. Only consult procfs in this interval. */
+** to execute a userspace destructor. A signal-zero probe can still succeed
+** throughout this interval. */
 static int thr_proc_read(int dir, const char *name, char *buf, size_t size)
 {
   int fd = openat(dir, name, O_RDONLY | O_CLOEXEC);
@@ -1016,62 +918,46 @@ done:
   return exiting;
 }
 
-static int thr_linux_tid_gone(const LJThrActorRecord *record)
+static int thr_linux_tid_gone(pid_t process, pid_t tid)
 {
-  return syscall(SYS_tgkill, (pid_t)record->process_id,
-                 (pid_t)record->native_tid, 0) == -1 && errno == ESRCH;
-}
-#endif
-
-static int lj_thr_actor_is_dead(uint32_t actor)
-{
-  LJThrActorRecord *record = (LJThrActorRecord *)
-    la_loadptr_acq((void *const *)&lj_thr_actor_records);
-  while (record) {
-    if (record->actor_id == actor) {
-      /* A pthread destructor can run before unrelated TLS destructors, so its
-      ** bit is only a cheap prerequisite. It is never sufficient death proof. */
-      if (la_load32_acq(&record->live) != 0)
-        return 0;
-#if LJ_TARGET_LINUX
-      {
-        int saved_errno = errno;
-        int dead = 0;
-        if (record->process_id == (uint32_t)getpid())
-          dead = thr_linux_tid_gone(record) ||
-            thr_linux_task_exiting(record->native_tid) ||
-            thr_linux_tid_gone(record);  /* Task disappeared during procfs read. */
-        errno = saved_errno;
-        return dead;
-      }
-#else
-      /* macOS currently has no equivalent stable kernel death witness in this
-      ** carrier. A destructor hint alone cannot authorize moved close. */
-      return 0;
-#endif
-    }
-    record = record->next;
-  }
-  return 0;  /* Unknown identities never authorize ownership migration. */
+  return syscall(SYS_tgkill, process, tid, 0) == -1 && errno == ESRCH;
 }
 
-/* Avoid retaining a pthread destructor callback into an unloaded image.
-** Concurrent unload/use is outside the ABI contract; stopped-user unload
-** leaves all records intact but permanently closes new actor admission. */
-static void __attribute__((destructor)) lj_thr_actor_registry_fini(void)
+/* A main-state owner records its own native task while holding the paired TG
+** and Lua state. Readers can compare a single snapshot with the actor whose
+** ownership they intend to transfer. A reused native TID can veto a transfer.
+** It cannot make the original task disappear while it still executes. */
+void lj_thr_main_task_bind(global_State *g)
 {
-  if (la_load32_acq(&lj_thr_actor_key_state) ==
-      LJ_THR_ACTOR_KEY_READY) {
-    la_store32_rel(&lj_thr_actor_key_state, LJ_THR_ACTOR_KEY_DEAD);
-    (void)pthread_key_delete(lj_thr_actor_key);
+  int saved_errno = errno;
+  pid_t process = getpid();
+  long tid = syscall(SYS_gettid);
+  la_u128 expect = { 0, 0 }, task = { 0, 0 };
+  if (process > 0 && tid > 0 && (uint64_t)tid <= INT32_MAX) {
+    task.hi = lj_thr_actor_current();
+    task.lo = ((uint64_t)(uint32_t)process << 32) | (uint32_t)tid;
   }
+  while (!la_cas128(&G2GG(g)->main_actor_task, &expect, task))
+    ;
+  errno = saved_errno;
+}
+
+static int thr_main_actor_exited(global_State *g, uint32_t actor)
+{
+  la_u128 task = la_load128_acq(&G2GG(g)->main_actor_task);
+  pid_t process = (pid_t)(task.lo >> 32), tid = (pid_t)(uint32_t)task.lo;
+  int saved_errno = errno, dead = 0;
+  if (task.hi == actor && tid > 0 && process == getpid()) {
+    dead = thr_linux_tid_gone(process, tid) ||
+      thr_linux_task_exiting((uint32_t)tid) || thr_linux_tid_gone(process, tid);
+  }
+  errno = saved_errno;
+  return dead;
 }
 #else
-static int lj_thr_actor_is_dead(uint32_t actor)
+static int thr_main_actor_exited(global_State *g, uint32_t actor)
 {
-  UNUSED(actor);
-  /* TlsAlloc has no foreign-thread destructor. Until the Windows carrier uses
-  ** FLS or another stable death witness, unknown exited actors fail closed. */
+  UNUSED(g); UNUSED(actor);
   return 0;
 }
 #endif
@@ -1195,28 +1081,10 @@ int lj_thr_tg_tls_init(void)
 {
   uint32_t actor = la_load32_acq(&lj_tls_actor_id);
   if (actor == 0) {
-    LJThrActorRecord *record;
-    int saved_errno = errno;
-    int ok = 0;
-    if (!lj_thr_actor_key_ensure())
-      goto out;
     actor = lj_thr_actor_newid();
     if (actor == 0)
-      goto out;
-    record = lj_thr_actor_record_new(actor);
-    if (!record)
-      goto out;
-    /* Publish the destructor witness before the hot TLS actor id. On failure
-    ** the process-lifetime node is made dead and the consumed id stays unique. */
-    if (pthread_setspecific(lj_thr_actor_key, record) != 0) {
-      la_store32_rel(&record->live, 0);
-      goto out;
-    }
+      return 0;
     la_store32_rel(&lj_tls_actor_id, actor);
-    ok = 1;
-  out:
-    errno = saved_errno;
-    return ok;
   }
   return 1;
 }
@@ -1791,14 +1659,14 @@ int lj_thr_main_close_claim(lua_State *L)
     return 1;
   prior_actor = lj_tg_actor_acq(tg);
   /* Actor zero is published by an explicit quiescent handoff. A nonzero actor
-  ** may be adopted only after its process-lifetime record plus stable kernel
-  ** witness prove the originating pthread exited, and the paired state claim
+  ** may be adopted only after the recorded kernel task has exited or can no
+  ** longer execute userspace, and the paired state claim
   ** still names that exact actor.
   ** Raw-NULL TLS alone is never migration authority. A live-yet-quiescent
   ** creator still needs an explicit/public handoff; arbitrary close-vs-free
   ** lifetime races remain outside this carrier arbitration. */
   if ((prior_actor != 0 &&
-       (prior_actor != old_actor || !lj_thr_actor_is_dead(prior_actor))) ||
+       (prior_actor != old_actor || !thr_main_actor_exited(g, prior_actor))) ||
       L->cframe != NULL ||
       lj_tg_in_native_acq(tg) != 0 || lj_tg_tab_read_depth_acq(tg) != 0 ||
       lj_tg_strtab_active_depth_acq(tg) != 0 ||
@@ -1817,6 +1685,7 @@ int lj_thr_main_close_claim(lua_State *L)
       abort();
     return 0;
   }
+  lj_thr_main_task_bind(g);
   /* A new physical actor also completes a wait for the old claim. */
   lj_state_owner_notify(L);
   if (lj_tg_actor_acq(tg) != actor ||

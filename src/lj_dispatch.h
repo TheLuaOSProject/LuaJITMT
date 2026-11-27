@@ -98,6 +98,9 @@ typedef struct GG_State {
   la_u128 arena_host_alloc;		/* Public allocator and userdata. */
   void *bootstrap_oom;			/* C jump target during state setup. */
 #endif
+#if LJ_TARGET_LINUX
+  la_u128 main_actor_task;  /* Physical actor, process and native TID for close. */
+#endif
 } GG_State;
 
 #define GG_OFS(field)	((int)offsetof(GG_State, field))

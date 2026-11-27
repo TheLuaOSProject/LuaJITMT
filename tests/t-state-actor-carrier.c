@@ -9,6 +9,7 @@
 */
 
 #include <assert.h>
+#include <errno.h>
 #include <pthread.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -25,6 +26,16 @@
 #define ACTOR_REUSE_THREADS 32u
 #define CLAIM_STRESS_ITERS 100000u
 #define WAIT_SPINS 10000000u
+
+#ifdef LJ_TEST_ACTOR_NO_MALLOC
+static _Thread_local int refusing_actor_malloc;
+
+void *__real_malloc(size_t size);
+void *__wrap_malloc(size_t size)
+{
+  return refusing_actor_malloc ? NULL : __real_malloc(size);
+}
+#endif
 
 typedef struct SpoofCtx {
   lua_State *target;
@@ -120,9 +131,17 @@ static void *spoof_thread(void *ud)
 static void *actor_thread(void *ud)
 {
   ActorCtx *ctx = (ActorCtx *)ud;
+#ifdef LJ_TEST_ACTOR_NO_MALLOC
+  refusing_actor_malloc = 1;
+#endif
+  errno = EDOM;
   ctx->before = lj_thr_actor_current();
   ctx->actor = lj_thr_actor_ensure();
   ctx->again = lj_thr_actor_ensure();
+  assert(errno == EDOM);
+#ifdef LJ_TEST_ACTOR_NO_MALLOC
+  refusing_actor_malloc = 0;
+#endif
   assert(ctx->before == 0);
   assert(ctx->actor != 0 && ctx->again == ctx->actor);
   assert(lj_thr_actor_current() == ctx->actor);

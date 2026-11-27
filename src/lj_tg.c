@@ -390,6 +390,7 @@ int lj_tg_init(GG_State *GG, int alloc_ready, uint32_t tid)
   L->tg_hint = tg;
   lj_state_owner_word_rel(L,
     lj_state_owner_pack(tid, lj_thr_actor_current()));
+  lj_thr_main_task_bind(g);
   if (!lj_thr_get_tg())
     lj_thr_set_tg(tg);  /* 03 section 3.2: bootstrap main OS-thread TLS. */
   if (!alloc_ready)
