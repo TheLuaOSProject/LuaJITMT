@@ -182,3 +182,14 @@ One control filled the candidate arena with 54 allocations of 1 KiB and its 24-c
 | 131,072 | 131,127 | 55 | 1,892.5 | 39.1 |
 
 The x64 Linux regression protects the page holding an unrelated 16-byte bin node while coalescing the candidate. After restoring page access, the next allocation in that class reuses that exact node. All 15 baseline processes touched the protected page. The patched build passed 60 targeted processes and 15 complete bin-capacity runs across GCC, Clang assertions, ASan, UBSan and TSan. Four builds also passed the stock source, imported bytecode and shared-runtime gates. Runs from other arenas in a size class used by the candidate still participate in the chain validation. [Regression](../tests/t-arena-bin-capacity.c).
+
+In four instrumented 1,400-second runs, five Lua workers and two collector
+workers completed the mixed workload with continuous full-GC requests. The
+base was `a02525340` and the comparison changed its allocator to the indexed
+implementation. For seed 137 the longest recorded scan by node count visited
+46,332 nodes before the change and 41,958 afterward. Of the latter, 41,562
+belonged to other arenas in the same size classes. For seed 149 the maxima
+were 23,992 and 22,992. All four runs joined and verified their finalizers.
+The two seeds gave opposite throughput orderings on different shared CPU
+sets. The class index still leaves work proportional to populated same-class
+chains.
