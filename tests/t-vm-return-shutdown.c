@@ -14,6 +14,8 @@
 
 static uint32_t entered, finished;
 
+enum { USERDATA_FINALIZER, CDATA_FINALIZER, ERROR_EVENT };
+
 static int returning_finalizer(lua_State *L)
 {
   TGState *tg = L2TG(L);
@@ -38,6 +40,17 @@ static int wait_for_callback(lua_State *L)
   return 0;
 }
 
+static int finalizer_error_event(lua_State *L)
+{
+  assert(lua_gettop(L) == 1);
+  assert(strcmp(lua_tostring(L, 1), "ordinary finalizer error") == 0);
+  lua_pushcfunction(L, returning_finalizer);
+  assert(lua_pcall(L, 0, LUA_MULTRET, 0) == LUA_ERRRUN);
+  assert(lua_gettop(L) == 2);
+  assert(strstr(lua_tostring(L, 2), "thread interrupted: VM shutdown"));
+  return 0;
+}
+
 static int observe_shutdown(lua_State *L)
 {
   assert(lua_gettop(L) == 3 && !lua_toboolean(L, 1));
@@ -48,14 +61,20 @@ static int observe_shutdown(lua_State *L)
   return 0;
 }
 
-static void run(int pool)
+static void run(int pool, int mode)
 {
   lua_State *L = ljt_lua_newstate_openlibs();
   la_store32_rlx(&entered, 0);
   la_store32_rlx(&finished, 0);
   lua_pushinteger(L, pool);
   lua_setglobal(L, "pool");
+  lua_pushboolean(L, mode == CDATA_FINALIZER);
+  lua_setglobal(L, "use_cdata");
   lua_register(L, "returning_finalizer", returning_finalizer);
+  if (mode == ERROR_EVENT) {
+    lua_register(L, "finalizer_error_event", finalizer_error_event);
+    ljt_lua_dostring(L, "jit.attach(finalizer_error_event, 'errfin')");
+  }
   lua_register(L, "observe_shutdown", observe_shutdown);
   lua_register(L, "wait_for_callback", wait_for_callback);
   ljt_lua_dostring(L,
@@ -64,7 +83,14 @@ static void run(int pool)
     "th.spawn(function()\n"
     "  local guard = 'caller guard'\n"
     "  local ok, err = pcall(function()\n"
-    "    do local u = newproxy(true); getmetatable(u).__gc = returning_finalizer end\n"
+    "    if use_cdata then\n"
+    "      local ffi = require('ffi')\n"
+    "      ffi.gc(ffi.new('int[1]'), returning_finalizer)\n"
+    "    else\n"
+    "      local u = newproxy(true)\n"
+    "      getmetatable(u).__gc = finalizer_error_event and\n"
+    "        function() error('ordinary finalizer error', 0) end or returning_finalizer\n"
+    "    end\n"
     "    while true do collectgarbage() end\n"
     "  end)\n"
     "  observe_shutdown(ok, err, guard)\n"
@@ -76,9 +102,17 @@ static void run(int pool)
 
 int main(void)
 {
+  int pool;
   alarm(45);
-  run(0);
-  run(2);
+  for (pool = 0; pool <= 2; pool += 2) {
+    run(pool, USERDATA_FINALIZER);
+#if LJ_HASFFI
+    run(pool, CDATA_FINALIZER);
+#endif
+#if LJ_HASJIT && !defined(LUAJIT_DISABLE_VMEVENT)
+    run(pool, ERROR_EVENT);
+#endif
+  }
   puts("shutdown during a finalizer return preserves the interrupted worker frame");
   return 0;
 }
